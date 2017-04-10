@@ -182,7 +182,34 @@ namespace NuGet.Build.Tasks.Pack
             }
 
             PopulateProjectAndPackageReferences(builder, assetsFile);
+            PopulateFrameworkAssemblyReferences(builder, request);
             return builder;
+        }
+
+        private void PopulateFrameworkAssemblyReferences(PackageBuilder builder, IPackTaskRequest<IMSBuildItem> request)
+        {
+            var tfmSpecificRefs = new Dictionary<string, IList<string>>(StringComparer.OrdinalIgnoreCase);
+            // Then add the TFM specific framework assembly references, and ignore any which have already been added above.
+            foreach(var tfmRef in request.AssemblyReferences)
+            {
+                var targetFramework = tfmRef.GetProperty("TargetFramework");
+
+                if (tfmSpecificRefs.ContainsKey(tfmRef.Identity))
+                {
+                    tfmSpecificRefs[tfmRef.Identity].Add(targetFramework);
+                }
+                else
+                {
+                    tfmSpecificRefs.Add(tfmRef.Identity, new List<string>() { targetFramework });
+                }                
+            }
+
+            builder.FrameworkReferences.AddRange(
+                tfmSpecificRefs.Select(
+                    t => new FrameworkAssemblyReference(
+                        t.Key, t.Value.Distinct().Select(
+                            k => NuGetFramework.Parse(k))
+                            )));
         }
 
         public PackCommandRunner GetPackCommandRunner(

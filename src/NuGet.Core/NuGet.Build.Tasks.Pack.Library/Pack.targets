@@ -168,7 +168,7 @@ Copyright (c) .NET Foundation. All rights reserved.
               NoPackageAnalysis="$(NoPackageAnalysis)"
               MinClientVersion="$(MinClientVersion)"
               Serviceable="$(Serviceable)"
-              AssemblyReferences="@(_References)"
+              TfmSpecificAssemblyReferences="@(_TfmSpecificReferences)"
               ContinuePackingAfterGeneratingNuspec="$(ContinuePackingAfterGeneratingNuspec)"
               NuspecOutputPath="$(BaseIntermediateOutputPath)"
               IncludeBuildOutput="$(IncludeBuildOutput)"
@@ -238,6 +238,25 @@ Copyright (c) .NET Foundation. All rights reserved.
           TaskParameter="TargetOutputs"
           ItemName="_SourceFiles" />
     </MSBuild>
+
+    <MSBuild
+      Projects="$(MSBuildProjectFullPath)"
+      Targets="_GetTfmSpecificFrameworkAssemblyReferences"
+      Properties="TargetFramework=%(_TargetFrameworks.Identity);
+                  BuildProjectReferences=false;">
+
+      <Output
+          TaskParameter="TargetOutputs"
+          ItemName="_TfmSpecificReferences" />
+    </MSBuild>
+  </Target>
+
+  <Target Name ="_GetTfmSpecificFrameworkAssemblyReferences" Returns="@(TfmSpecificFrameworkAssemblyReferences)">
+    <ItemGroup>
+      <TfmSpecificFrameworkAssemblyReferences Include="@(Reference)" Condition="'%(Reference.Pack)' == 'true'">
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+      </TfmSpecificFrameworkAssemblyReferences>
+    </ItemGroup>
   </Target>
   
   <Target Name="_GetBuildOutputFilesWithTfm"

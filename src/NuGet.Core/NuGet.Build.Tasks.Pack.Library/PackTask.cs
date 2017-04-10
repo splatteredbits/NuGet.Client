@@ -120,7 +120,6 @@ namespace NuGet.Build.Tasks.Pack
             return new PackTaskRequest
             {
                 AssemblyName = MSBuildStringUtility.TrimAndGetNullForEmpty(AssemblyName),
-                AssemblyReferences = MSBuildUtility.WrapMSBuildItem(AssemblyReferences),
                 Authors = MSBuildStringUtility.TrimAndExcludeNullOrEmpty(Authors),
                 BuildOutputInPackage = MSBuildUtility.WrapMSBuildItem(BuildOutputInPackage),
                 BuildOutputFolder = MSBuildStringUtility.TrimAndGetNullForEmpty(BuildOutputFolder),
@@ -161,6 +160,7 @@ namespace NuGet.Build.Tasks.Pack
                 TargetFrameworks = MSBuildStringUtility.TrimAndExcludeNullOrEmpty(TargetFrameworks),
                 TargetPathsToSymbols = MSBuildUtility.WrapMSBuildItem(TargetPathsToSymbols),
                 Title = MSBuildStringUtility.TrimAndGetNullForEmpty(Title),
+                AssemblyReferences = MSBuildUtility.WrapMSBuildItem(AssemblyReferences),
             };
         }
     }
