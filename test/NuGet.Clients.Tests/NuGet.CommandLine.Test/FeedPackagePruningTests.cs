@@ -24,20 +24,24 @@ namespace NuGet.CommandLine.Test
             using (var pathContext = new SimpleTestPathContext())
             {
                 // Set up solution, project, and packages
+                var testLogger = new TestLogger();
                 var solution = new SimpleTestSolutionContext(pathContext.SolutionRoot);
+                var serverRepoPath = Path.Combine(pathContext.WorkingDirectory, "serverPackages");
+
+                var packageX100 = new SimpleTestPackageContext("x", "1.0.0");
+                var packageX200 = new SimpleTestPackageContext("x", "2.0.0");
+
+                SimpleTestPackageUtility.CreatePackages(
+                    serverRepoPath,
+                    packageX100,
+                    packageX200);
 
                 var projectA = SimpleTestProjectContext.CreateNETCore(
-                    "a",
-                    pathContext.SolutionRoot,
-                    NuGetFramework.Parse("net45"));
+                        "a",
+                        pathContext.SolutionRoot,
+                        NuGetFramework.Parse("net45"));
 
-                var packageX = new SimpleTestPackageContext()
-                {
-                    Id = "x",
-                    Version = "1.0.0"
-                };
-
-                projectA.AddPackageToAllFrameworks(packageX);
+                projectA.AddPackageToAllFrameworks(packageX100);
 
                 solution.Projects.Add(projectA);
                 solution.Create(pathContext.SolutionRoot);
@@ -47,13 +51,6 @@ namespace NuGet.CommandLine.Test
                 Util.AddFlatContainerResource(indexJson, server);
                 Util.AddRegistrationResource(indexJson, server);
 
-                var serverRepoPath = Path.Combine(pathContext.WorkingDirectory, "serverPackages");
-
-                await SimpleTestPackageUtility.CreateFolderFeedV3(
-                    pathContext.PackageSource,
-                    PackageSaveMode.Defaultv3,
-                    packageX);
-
                 server.Get.Add("/", request =>
                 {
                     return ServerHandlerV3(request, server, indexJson, serverRepoPath);
@@ -61,11 +58,19 @@ namespace NuGet.CommandLine.Test
 
                 server.Start();
 
-                // Act
+                // Restore and populate the cache
                 var r = Util.RestoreSolution(pathContext);
 
+                // Delete x 1.0.0
+                File.Delete(LocalFolderUtility.GetPackageV2(serverRepoPath, packageX100.Identity, testLogger).Path);
+
+                // Act
+                r = Util.RestoreSolution(pathContext);
+
+                var xLib = projectA.AssetsFile.Libraries.SingleOrDefault(e => e.Name == "x");
+
                 // Assert
-                Assert.True(File.Exists(projectA.AssetsFileOutputPath), r.Item2);
+                Assert.Equal("2.0.0", xLib.Version.ToNormalizedString());
             }
         }
 
@@ -100,7 +105,7 @@ namespace NuGet.CommandLine.Test
 
                         var id = parts[parts.Length - 2];
 
-                        foreach (var pkg in LocalFolderUtility.GetPackagesV3(repositoryPath, id, new TestLogger()))
+                        foreach (var pkg in LocalFolderUtility.GetPackagesV2(repositoryPath, id, new TestLogger()))
                         {
                             array.Add(pkg.Identity.Version.ToNormalizedString());
                         }
