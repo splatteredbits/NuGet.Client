@@ -11,7 +11,7 @@ namespace NuGet.Protocol
     /// <summary>
     /// Thrown when a package cannot be found on a feed.
     /// </summary>
-    public class PackageNotFoundProtocolException : NuGetProtocolException
+    public class PackageNotFoundProtocolException : InvalidCacheProtocolException
     {
         /// <summary>
         /// Package that was not found.

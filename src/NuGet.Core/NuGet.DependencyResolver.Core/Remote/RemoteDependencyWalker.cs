@@ -1,4 +1,4 @@
-// Copyright (c) .NET Foundation. All rights reserved.
+﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
+using NuGet.Packaging.Core;
 using NuGet.RuntimeModel;
 using NuGet.Versioning;
 
@@ -577,6 +578,13 @@ namespace NuGet.DependencyResolver
             }
 
             return nonHttpMatch;
+        }
+
+        private static async Task<RemoteMatch> GetMatchWithOriginalIdentity(RemoteMatch match)
+        {
+            var identity = new PackageIdentity(match.Library.Name, match.Library.Version);
+
+            match.Provider.GetOriginalIdentityAsync(identity, )
         }
 
         private static async Task<RemoteMatch> FindLibrary(
