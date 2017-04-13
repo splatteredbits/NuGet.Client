@@ -57,6 +57,7 @@ namespace NuGet.Commands
 
         /// <summary>
         /// Discovers all versions of a package from a source and selects the best match.
+        /// This does not download the package.
         /// </summary>
         public async Task<LibraryIdentity> FindLibraryAsync(
             LibraryRange libraryRange,
@@ -67,70 +68,23 @@ namespace NuGet.Commands
         {
             await EnsureResource();
 
-            LibraryIdentity resolvedLibrary = null;
-            var currentCacheContext = cacheContext;
+            // Discover all versions from the feed
+            var packageVersions = await GetPackageVersions(libraryRange.Name, cacheContext, logger, cancellationToken);
 
-            // Allow two attempts, the second attempt will invalidate the cache and try again.
-            for (var i = 0; i < 2 && resolvedLibrary == null; i++)
+            // Select the best match
+            var packageVersion = packageVersions?.FindBestMatch(libraryRange.VersionRange, version => version);
+
+            if (packageVersion != null)
             {
-                try
+                return new LibraryIdentity
                 {
-                    resolvedLibrary = await GetLibraryIdentityAsync(libraryRange, targetFramework, currentCacheContext, logger, cancellationToken);
-                }
-                catch (PackageNotFoundProtocolException ex)
-                {
-                    if (i == 0)
-                    {
-                        // 1st failure, invalidate the cache and try again.
-                        // Clear the on disk and memory caches during the next request.
-                        currentCacheContext = cacheContext.Clone();
-                        currentCacheContext.MaxAge = DateTimeOffset.UtcNow;
-                        currentCacheContext.RefreshMemoryCache = true;
-
-                        logger.LogDebug($"Failed to download package {libraryRange.Name} from feed. Clearing the cache for this package and trying again.");
-                    }
-                    else
-                    {
-                        // 2nd failure, the feed is likely corrupt or removing packages too fast to keep up with.
-                        var message = string.Format(
-                            CultureInfo.CurrentCulture,
-                            Strings.Error_PackageNotFoundWhenExpected,
-                            _sourceRepository.PackageSource.Source,
-                            ex.PackageIdentity.ToString());
-
-                        throw new FatalProtocolException(message, ex);
-                    }
-                }
+                    Name = libraryRange.Name,
+                    Version = packageVersion,
+                    Type = LibraryType.Package
+                };
             }
 
-            return resolvedLibrary;
-        }
-
-        /// <summary>
-        /// Find the original casing of the package id/version.
-        /// </summary>
-        public async Task<LibraryIdentity> GetOriginalIdentityAsync(
-            LibraryIdentity identity,
-            SourceCacheContext cacheContext,
-            ILogger logger,
-            CancellationToken cancellationToken)
-        {
-            await EnsureResource();
-
-            // This should throw if the package does not exist.
-            var originalIdentity = await _findPackagesByIdResource.GetOriginalIdentityAsync(
-                identity.Name,
-                identity.Version,
-                cacheContext,
-                logger,
-                cancellationToken);
-
-            return new LibraryIdentity()
-            {
-                Name = originalIdentity.Id,
-                Version = originalIdentity.Version,
-                Type = identity.Type
-            };
+            return null;
         }
 
         public async Task<LibraryDependencyInfo> GetDependenciesAsync(
@@ -269,35 +223,6 @@ namespace NuGet.Commands
                     }
                 }
             }
-        }
-
-        /// <summary>
-        /// Retrieve a package from the feed and read the original identity from the nuspec.
-        /// </summary>
-        private async Task<LibraryIdentity> GetLibraryIdentityAsync(
-            LibraryRange libraryRange,
-            NuGetFramework targetFramework,
-            SourceCacheContext cacheContext,
-            ILogger logger,
-            CancellationToken cancellationToken)
-        {
-            // Discover all versions from the feed
-            var packageVersions = await GetPackageVersions(libraryRange.Name, cacheContext, logger, cancellationToken);
-
-            // Select the best match
-            var packageVersion = packageVersions?.FindBestMatch(libraryRange.VersionRange, version => version);
-
-            if (packageVersion != null)
-            {
-                return new LibraryIdentity
-                {
-                    Name = libraryRange.Name,
-                    Version = packageVersion,
-                    Type = LibraryType.Package
-                };
-            }
-
-            return null;
         }
 
         /// <summary>

@@ -24,7 +24,7 @@ namespace NuGet.DependencyResolver
             ILogger logger,
             CancellationToken cancellationToken);
 
-        Task<IEnumerable<LibraryDependency>> GetDependenciesAsync(
+        Task<LibraryDependencyInfo> GetDependenciesAsync(
             LibraryIdentity match,
             NuGetFramework targetFramework,
             SourceCacheContext cacheContext,

@@ -5,13 +5,11 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
-using NuGet.Packaging.Core;
 using NuGet.RuntimeModel;
 using NuGet.Versioning;
 
@@ -343,14 +341,17 @@ namespace NuGet.DependencyResolver
                 return CreateUnresolvedMatch(libraryRange);
             }
 
-            IEnumerable<LibraryDependency> dependencies;
+            LibraryDependencyInfo dependencies;
 
             // For local matches such as projects get the dependencies from the LocalLibrary property.
             var localMatch = match as LocalMatch;
 
             if (localMatch != null)
             {
-                dependencies = localMatch.LocalLibrary.Dependencies;
+                dependencies = LibraryDependencyInfo.Create(
+                    localMatch.LocalLibrary.Identity,
+                    framework,
+                    localMatch.LocalLibrary.Dependencies);
             }
             else
             {
@@ -363,12 +364,17 @@ namespace NuGet.DependencyResolver
                     cancellationToken);
             }
 
+            // Copy the original identity to the remote match.
+            // This ensures that the correct casing is used for
+            // the id/version.
+            match.Library = dependencies.Library;
+
             return new GraphItem<RemoteResolveResult>(match.Library)
             {
                 Data = new RemoteResolveResult
                 {
                     Match = match,
-                    Dependencies = dependencies
+                    Dependencies = dependencies.Dependencies
                 },
             };
         }
@@ -447,7 +453,7 @@ namespace NuGet.DependencyResolver
             {
                 // Check for the specific version locally.
                 var localMatch = await FindLibraryByVersion(libraryRange, framework, _context.LocalLibraryProviders, cancellationToken);
- 
+
                 if (localMatch != null
                     && localMatch.Library.Version.Equals(libraryRange.VersionRange.MinVersion))
                 {
@@ -578,13 +584,6 @@ namespace NuGet.DependencyResolver
             }
 
             return nonHttpMatch;
-        }
-
-        private static async Task<RemoteMatch> GetMatchWithOriginalIdentity(RemoteMatch match)
-        {
-            var identity = new PackageIdentity(match.Library.Name, match.Library.Version);
-
-            match.Provider.GetOriginalIdentityAsync(identity, )
         }
 
         private static async Task<RemoteMatch> FindLibrary(

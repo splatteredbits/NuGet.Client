@@ -5,9 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NuGet.Frameworks;
-using NuGet.LibraryModel;
 
-namespace NuGet.Commands
+namespace NuGet.LibraryModel
 {
     public class LibraryDependencyInfo
     {

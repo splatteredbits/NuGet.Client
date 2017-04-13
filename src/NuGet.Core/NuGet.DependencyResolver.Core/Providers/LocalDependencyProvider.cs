@@ -1,4 +1,4 @@
-// Copyright (c) .NET Foundation. All rights reserved.
+﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
@@ -41,7 +41,7 @@ namespace NuGet.DependencyResolver
             return Task.FromResult(library.Identity);
         }
 
-        public Task<IEnumerable<LibraryDependency>> GetDependenciesAsync(
+        public Task<LibraryDependencyInfo> GetDependenciesAsync(
             LibraryIdentity library,
             NuGetFramework targetFramework,
             SourceCacheContext cacheContext,
@@ -50,7 +50,12 @@ namespace NuGet.DependencyResolver
         {
             var description = _dependencyProvider.GetLibrary(library, targetFramework);
 
-            return Task.FromResult(description.Dependencies);
+            var dependencyInfo = LibraryDependencyInfo.Create(
+                description.Identity,
+                targetFramework,
+                description.Dependencies);
+
+            return Task.FromResult(dependencyInfo);
         }
 
         public Task CopyToAsync(
