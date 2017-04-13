@@ -7,6 +7,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Common;
+using NuGet.Configuration;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
 using NuGet.Protocol.Core.Types;
@@ -23,6 +24,8 @@ namespace NuGet.DependencyResolver
         }
 
         public bool IsHttp { get; private set; }
+
+        public PackageSource Source { get; private set; }
 
         public Task<LibraryIdentity> FindLibraryAsync(
             LibraryRange libraryRange,

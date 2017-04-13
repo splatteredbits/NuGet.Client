@@ -1,19 +1,17 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Common;
+using NuGet.Configuration;
 using NuGet.DependencyResolver;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
 using NuGet.Packaging;
-using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
@@ -54,6 +52,8 @@ namespace NuGet.Commands
         }
 
         public bool IsHttp => _sourceRepository.PackageSource.IsHttp;
+
+        public PackageSource Source => _sourceRepository.PackageSource;
 
         /// <summary>
         /// Discovers all versions of a package from a source and selects the best match.
