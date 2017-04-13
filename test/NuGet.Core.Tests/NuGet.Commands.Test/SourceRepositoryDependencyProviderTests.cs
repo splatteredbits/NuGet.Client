@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,6 +23,40 @@ namespace NuGet.Commands.Test
 {
     public class SourceRepositoryDependencyProviderTests
     {
+        [Fact]
+        public async Task SourceRepositoryDependencyProvider_VerifyFindLibraryAsyncRetriesWhenMissing()
+        {
+            // Arrange
+            var testLogger = new TestLogger();
+            var cacheContext = new SourceCacheContext();
+
+            var findResource = new Mock<FindPackageByIdResource>();
+            findResource.Setup(s => s.GetAllVersionsAsync(It.IsAny<string>(), It.IsAny<SourceCacheContext>(), It.IsAny<ILogger>(), It.IsAny<CancellationToken>()))
+                            .ReturnsAsync(new[] { NuGetVersion.Parse("1.0.0"), NuGetVersion.Parse("2.0.0") });
+
+            var sourceContexts = new List<SourceCacheContext>();
+
+            findResource.Setup(s => s.GetOriginalIdentityAsync(It.IsAny<string>(), It.IsAny<NuGetVersion>(), It.IsAny<SourceCacheContext>(), It.IsAny<ILogger>(), It.IsAny<CancellationToken>()))
+                .Callback<string, NuGetVersion, SourceCacheContext, ILogger, CancellationToken>((id, v, s, l, t) => sourceContexts.Add(s))
+                .ThrowsAsync(new PackageNotFoundProtocolException(new PackageIdentity("x", NuGetVersion.Parse("1.0.0"))));
+
+            var source = new Mock<SourceRepository>();
+            source.Setup(s => s.GetResourceAsync<FindPackageByIdResource>())
+                .ReturnsAsync(findResource.Object);
+            source.SetupGet(s => s.PackageSource)
+                .Returns(new PackageSource("http://test/index.json"));
+
+            var libraryRange = new LibraryRange("x", new VersionRange(new NuGetVersion(1, 0, 0)), LibraryDependencyTarget.Package);
+            var provider = new SourceRepositoryDependencyProvider(source.Object, testLogger, cacheContext, ignoreFailedSources: true, ignoreWarning: true);
+
+            // Act && Assert
+            await Assert.ThrowsAsync<FatalProtocolException>(async () =>
+                await provider.FindLibraryAsync(libraryRange, NuGetFramework.Parse("net45"), cacheContext, testLogger, CancellationToken.None));
+
+            Assert.False(sourceContexts[0].RefreshMemoryCache);
+            Assert.True(sourceContexts[1].RefreshMemoryCache);
+        }
+
         [Fact]
         public async Task SourceRepositoryDependencyProvider_VerifyFindLibraryAsyncThrowsWhenListedPackageIsMissing()
         {
