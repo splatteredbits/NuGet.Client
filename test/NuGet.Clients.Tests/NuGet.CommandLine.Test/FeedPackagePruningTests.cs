@@ -17,7 +17,7 @@ namespace NuGet.CommandLine.Test
     public class FeedPackagePruningTests
     {
         [Fact]
-        public async Task FeedPackagePruning_GivenThatAV3FeedPrunesAPackageDuringRestoreVerifyRestoreRecovers()
+        public void FeedPackagePruning_GivenThatAV3FeedPrunesAPackageDuringRestoreVerifyRestoreRecovers()
         {
             // Arrange
             using (var server = new MockServer())
@@ -40,10 +40,16 @@ namespace NuGet.CommandLine.Test
                         "a",
                         pathContext.SolutionRoot,
                         NuGetFramework.Parse("net45"));
-
-                projectA.AddPackageToAllFrameworks(packageX100);
-
+                projectA.AddPackageToAllFrameworks(packageX200);
                 solution.Projects.Add(projectA);
+
+                var projectB = SimpleTestProjectContext.CreateNETCore(
+                        "b",
+                        pathContext.SolutionRoot,
+                        NuGetFramework.Parse("net45"));
+                projectB.AddPackageToAllFrameworks(packageX100);
+                solution.Projects.Add(projectB);
+
                 solution.Create(pathContext.SolutionRoot);
 
                 // Server setup
@@ -58,16 +64,19 @@ namespace NuGet.CommandLine.Test
 
                 server.Start();
 
-                // Restore and populate the cache
-                var r = Util.RestoreSolution(pathContext);
+                var feedUrl = server.Uri + "index.json";
+
+                // Restore x 2.0.0 and populate the http cache
+                var r = Util.Restore(pathContext, projectA.ProjectPath, 0, "-Source", feedUrl);
 
                 // Delete x 1.0.0
                 File.Delete(LocalFolderUtility.GetPackageV2(serverRepoPath, packageX100.Identity, testLogger).Path);
 
                 // Act
-                r = Util.RestoreSolution(pathContext);
+                // Restore x 1.0.0
+                r = Util.Restore(pathContext, projectB.ProjectPath, 0, "-Source", feedUrl);
 
-                var xLib = projectA.AssetsFile.Libraries.SingleOrDefault(e => e.Name == "x");
+                var xLib = projectB.AssetsFile.Libraries.SingleOrDefault(e => e.Name == "x");
 
                 // Assert
                 Assert.Equal("2.0.0", xLib.Version.ToNormalizedString());

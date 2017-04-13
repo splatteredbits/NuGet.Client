@@ -161,6 +161,15 @@ namespace NuGet.Commands {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to The feed &apos;{0}&apos; lists package &apos;{1}&apos; but multiple attempts to download the nupkg have failed. The feed is either invalid or required packages were removed while the current operation was in progress. Verify the package exists on the feed and try again..
+        /// </summary>
+        internal static string Error_PackageNotFoundWhenExpected {
+            get {
+                return ResourceManager.GetString("Error_PackageNotFoundWhenExpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Failed to build package. {0}.
         /// </summary>
         internal static string Error_PackFailed {

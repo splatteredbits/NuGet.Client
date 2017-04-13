@@ -79,10 +79,10 @@ namespace NuGet.Protocol
             
             if (reader == null)
             {
-                throw new FatalProtocolException(string.Format(
-                    CultureInfo.CurrentCulture,
-                    Strings.Log_FailedToGetNupkgStream,
-                    identity.Id));
+                // The package was not found on the feed. This typically means
+                // that the feed listed the package, but then returned 404 for the nupkg.
+                // The cache needs to be invaldiated and the download call made again.
+                throw new PackageNotFoundProtocolException(identity);
             }
 
             lock (_nuspecReadersLock)

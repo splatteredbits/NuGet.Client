@@ -511,4 +511,7 @@ For more information, visit http://docs.nuget.org/docs/reference/command-line-re
     <value>Clearing NuGet Temp cache: {0}</value>
     <comment>{0} : Temp cache path</comment>
   </data>
+  <data name="Error_PackageNotFoundWhenExpected">
+    <value>The feed '{0}' lists package '{1}' but multiple attempts to download the nupkg have failed. The feed is either invalid or required packages were removed while the current operation was in progress. Verify the package exists on the feed and try again.</value>
+  </data>
 </root>

@@ -49,7 +49,7 @@ namespace NuGet.Protocol
             ILogger logger,
             CancellationToken token)
         {
-            return Task.FromResult(GetVersions(id, logger).AsEnumerable());
+            return Task.FromResult(GetVersions(id, cacheContext, logger).AsEnumerable());
         }
 
         public override async Task<bool> CopyNupkgToStreamAsync(
@@ -60,7 +60,7 @@ namespace NuGet.Protocol
             ILogger logger,
             CancellationToken token)
         {
-            var matchedVersion = GetVersion(id, version, logger);
+            var matchedVersion = GetVersion(id, version, cacheContext, logger);
 
             if (matchedVersion != null)
             {
@@ -83,7 +83,7 @@ namespace NuGet.Protocol
             ILogger logger,
             CancellationToken token)
         {
-            var matchedVersion = GetVersion(id, version, logger);
+            var matchedVersion = GetVersion(id, version, cacheContext, logger);
             PackageIdentity outputIdentity = null;
             if (matchedVersion != null)
             {
@@ -108,7 +108,7 @@ namespace NuGet.Protocol
             ILogger logger,
             CancellationToken token)
         {
-            var matchedVersion = GetVersion(id, version, logger);
+            var matchedVersion = GetVersion(id, version, cacheContext, logger);
             FindPackageByIdDependencyInfo dependencyInfo = null;
             if (matchedVersion != null)
             {
@@ -156,14 +156,27 @@ namespace NuGet.Protocol
             }
         }
 
-        private NuGetVersion GetVersion(string id, NuGetVersion version, ILogger logger)
+        private NuGetVersion GetVersion(string id, NuGetVersion version, SourceCacheContext cacheContext, ILogger logger)
         {
-            return GetVersions(id, logger).FirstOrDefault(v => v == version);
+            return GetVersions(id, cacheContext, logger).FirstOrDefault(v => v == version);
         }
 
-        private List<NuGetVersion> GetVersions(string id, ILogger logger)
+        private List<NuGetVersion> GetVersions(string id, SourceCacheContext cacheContext, ILogger logger)
         {
-            return _cache.GetOrAdd(id, keyId => GetVersionsCore(keyId, logger));
+            List<NuGetVersion> results = null;
+
+            Func<string, List<NuGetVersion>> findPackages = (keyId) => GetVersionsCore(keyId, logger);
+
+            if (cacheContext.RefreshMemoryCache)
+            {
+                results = _cache.AddOrUpdate(id, findPackages, (k, v) => findPackages(k));
+            }
+            else
+            {
+                results = _cache.GetOrAdd(id, findPackages);
+            }
+
+            return results;
         }
 
         private List<NuGetVersion> GetVersionsCore(string id, ILogger logger)

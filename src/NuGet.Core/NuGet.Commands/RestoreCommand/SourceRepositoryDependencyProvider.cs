@@ -1,7 +1,9 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -11,6 +13,7 @@ using NuGet.DependencyResolver;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
 using NuGet.Packaging;
+using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
@@ -52,6 +55,9 @@ namespace NuGet.Commands
 
         public bool IsHttp => _sourceRepository.PackageSource.IsHttp;
 
+        /// <summary>
+        /// Discovers all versions of a package from a source and selects the best match.
+        /// </summary>
         public async Task<LibraryIdentity> FindLibraryAsync(
             LibraryRange libraryRange,
             NuGetFramework targetFramework,
@@ -61,53 +67,43 @@ namespace NuGet.Commands
         {
             await EnsureResource();
 
-            IEnumerable<NuGetVersion> packageVersions = null;
-            try
+            LibraryIdentity resolvedLibrary = null;
+            var currentCacheContext = cacheContext;
+
+            // Allow two attempts, the second attempt will invalidate the cache and try again.
+            for (var i = 0; i < 2 && resolvedLibrary == null; i++)
             {
-                if (_throttle != null)
+                try
                 {
-                    await _throttle.WaitAsync();
+                    resolvedLibrary = await GetLibraryIdentityAsync(libraryRange, targetFramework, currentCacheContext, logger, cancellationToken);
                 }
-                packageVersions = await _findPackagesByIdResource.GetAllVersionsAsync(
-                    libraryRange.Name,
-                    cacheContext,
-                    logger,
-                    cancellationToken);
-            }
-            catch (FatalProtocolException e) when (_ignoreFailedSources)
-            {
-                if (!_ignoreWarning)
+                catch (PackageNotFoundProtocolException ex)
                 {
-                    _logger.LogWarning(e.Message);
+                    if (i == 0)
+                    {
+                        // 1st failure, invalidate the cache and try again.
+                        // Clear the on disk and memory caches during the next request.
+                        currentCacheContext = cacheContext.Clone();
+                        currentCacheContext.MaxAge = DateTimeOffset.UtcNow;
+                        currentCacheContext.RefreshMemoryCache = true;
+
+                        logger.LogDebug($"Failed to download package {libraryRange.Name} from feed. Clearing the cache for this package and trying again.");
+                    }
+                    else
+                    {
+                        // 2nd failure, the feed is likely corrupt or removing packages too fast to keep up with.
+                        var message = string.Format(
+                            CultureInfo.CurrentCulture,
+                            Strings.Error_PackageNotFoundWhenExpected,
+                            _sourceRepository.PackageSource.Source,
+                            ex.PackageIdentity.ToString());
+
+                        throw new FatalProtocolException(message, ex);
+                    }
                 }
-                return null;
-            }
-            finally
-            {
-                _throttle?.Release();
             }
 
-            var packageVersion = packageVersions?.FindBestMatch(libraryRange.VersionRange, version => version);
-
-            if (packageVersion != null)
-            {
-                // Use the original package identity for the library identity
-                var packageIdentity = await _findPackagesByIdResource.GetOriginalIdentityAsync(
-                    libraryRange.Name,
-                    packageVersion,
-                    cacheContext,
-                    logger,
-                    cancellationToken);
-
-                return new LibraryIdentity
-                {
-                    Name = packageIdentity.Id,
-                    Version = packageIdentity.Version,
-                    Type = LibraryType.Package
-                };
-            }
-
-            return null;
+            return resolvedLibrary;
         }
 
         public async Task<IEnumerable<LibraryDependency>> GetDependenciesAsync(
@@ -231,6 +227,80 @@ namespace NuGet.Commands
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Retrieve a package from the feed and read the original identity from the nuspec.
+        /// </summary>
+        private async Task<LibraryIdentity> GetLibraryIdentityAsync(
+            LibraryRange libraryRange,
+            NuGetFramework targetFramework,
+            SourceCacheContext cacheContext,
+            ILogger logger,
+            CancellationToken cancellationToken)
+        {
+            // Discover all versions from the feed
+            var packageVersions = await GetPackageVersions(libraryRange.Name, cacheContext, logger, cancellationToken);
+
+            // Select the best match
+            var packageVersion = packageVersions?.FindBestMatch(libraryRange.VersionRange, version => version);
+
+            if (packageVersion != null)
+            {
+                // Use the original package identity for the library identity
+                var originalIdentity = await _findPackagesByIdResource.GetOriginalIdentityAsync(
+                                        libraryRange.Name,
+                                        packageVersion,
+                                        cacheContext,
+                                        logger,
+                                        cancellationToken);
+
+                return new LibraryIdentity
+                {
+                    Name = originalIdentity.Id,
+                    Version = originalIdentity.Version,
+                    Type = LibraryType.Package
+                };
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Discover all package versions from a feed.
+        /// </summary>
+        private async Task<IEnumerable<NuGetVersion>> GetPackageVersions(string id,
+                                                                    SourceCacheContext cacheContext,
+                                                                    ILogger logger,
+                                                                    CancellationToken cancellationToken)
+        {
+            IEnumerable<NuGetVersion> packageVersions = null;
+            try
+            {
+                if (_throttle != null)
+                {
+                    await _throttle.WaitAsync();
+                }
+                packageVersions = await _findPackagesByIdResource.GetAllVersionsAsync(
+                    id,
+                    cacheContext,
+                    logger,
+                    cancellationToken);
+            }
+            catch (FatalProtocolException e) when (_ignoreFailedSources)
+            {
+                if (!_ignoreWarning)
+                {
+                    _logger.LogWarning(e.Message);
+                }
+                return null;
+            }
+            finally
+            {
+                _throttle?.Release();
+            }
+
+            return packageVersions;
         }
     }
 }
