@@ -25,9 +25,6 @@ namespace NuGet.Protocol
         private readonly ConcurrentDictionary<string, List<NuGetVersion>> _cache
             = new ConcurrentDictionary<string, List<NuGetVersion>>(StringComparer.OrdinalIgnoreCase);
 
-        private readonly ConcurrentDictionary<PackageIdentity, FindPackageByIdDependencyInfo> _dependencyCache
-            = new ConcurrentDictionary<PackageIdentity, FindPackageByIdDependencyInfo>();
-
         private readonly string _source;
         private readonly VersionFolderPathResolver _resolver;
 
@@ -90,15 +87,13 @@ namespace NuGet.Protocol
             {
                 var identity = new PackageIdentity(id, matchedVersion);
 
-                dependencyInfo = _dependencyCache.GetOrAdd(
-                                       key: identity,
-                                       valueFactory: (e) => ProcessNuspecReader(
-                                                e.Id,
-                                                e.Version,
+                dependencyInfo = ProcessNuspecReader(
+                                                id,
+                                                matchedVersion,
                                                 nuspecReader =>
                                                 {
                                                     return GetDependencyInfo(nuspecReader);
-                                                }));
+                                                });
             }
 
             return Task.FromResult(dependencyInfo);
