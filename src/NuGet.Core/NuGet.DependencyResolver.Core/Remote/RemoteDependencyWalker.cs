@@ -2,19 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using NuGet.Common;
-using NuGet.DependencyResolver.Core;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
-using NuGet.Protocol;
-using NuGet.Protocol.Core.Types;
 using NuGet.RuntimeModel;
 using NuGet.Versioning;
 
@@ -83,7 +77,7 @@ namespace NuGet.DependencyResolver
             var node = new GraphNode<RemoteResolveResult>(libraryRange)
             {
                 // Resolve the dependency from the cache or sources
-                Item = await ResolverUtility.FindLibraryCached(
+                Item = await ResolverUtility.FindLibraryCachedAsync(
                     _context.FindLibraryEntryCache,
                     libraryRange,
                     framework,
