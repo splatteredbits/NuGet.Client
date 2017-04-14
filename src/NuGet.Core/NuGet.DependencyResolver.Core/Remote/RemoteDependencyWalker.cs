@@ -88,6 +88,7 @@ namespace NuGet.DependencyResolver
                     libraryRange,
                     framework,
                     outerEdge,
+                    _context,
                     CancellationToken.None)
             };
 
