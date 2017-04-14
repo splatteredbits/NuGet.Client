@@ -45,22 +45,6 @@ namespace NuGet.Protocol
             return result.Select(item => item.Identity.Version);
         }
 
-        public override async Task<PackageIdentity> GetOriginalIdentityAsync(
-            string id,
-            NuGetVersion version,
-            SourceCacheContext cacheContext,
-            ILogger logger,
-            CancellationToken cancellationToken)
-        {
-            var packageInfo = await GetPackageInfoAsync(id, version, cacheContext, logger, cancellationToken);
-            if (packageInfo == null)
-            {
-                return null;
-            }
-
-            return packageInfo.Identity;
-        }
-
         public override async Task<FindPackageByIdDependencyInfo> GetDependencyInfoAsync(
             string id,
             NuGetVersion version,

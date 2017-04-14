@@ -49,24 +49,6 @@ namespace NuGet.Protocol.Core.Types
             CancellationToken token);
 
         /// <summary>
-        /// Gets the original ID and version for a package. This is useful when finding the
-        /// canonical casing for a package ID. Note that the casing of a package ID can vary from
-        /// version to version.
-        /// </summary>
-        /// <param name="id">The package ID. This value is case insensitive.</param>
-        /// <param name="version">The version.</param>
-        /// <param name="cacheContext">The source cache context.</param>
-        /// <param name="logger">The logger.</param>
-        /// <param name="token">The cancellation token.</param>
-        /// <returns>The package identity, with the ID having the case provided by the package author.</returns>
-        public abstract Task<PackageIdentity> GetOriginalIdentityAsync(
-            string id,
-            NuGetVersion version,
-            SourceCacheContext cacheContext,
-            ILogger logger,
-            CancellationToken token);
-
-        /// <summary>
         /// Read dependency info from a nuspec.
         /// </summary>
         /// <remarks>This also verifies minClientVersion.</remarks>

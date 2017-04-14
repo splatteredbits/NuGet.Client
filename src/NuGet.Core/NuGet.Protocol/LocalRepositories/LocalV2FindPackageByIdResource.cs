@@ -43,22 +43,6 @@ namespace NuGet.Protocol
             return Task.FromResult(infos.Select(p => p.Identity.Version));
         }
 
-        public override Task<PackageIdentity> GetOriginalIdentityAsync(
-            string id,
-            NuGetVersion version,
-            SourceCacheContext cacheContext,
-            ILogger logger,
-            CancellationToken token)
-        {
-            var info = GetPackageInfo(id, version, cacheContext, logger);
-            if (info != null)
-            {
-                return Task.FromResult(info.Identity);
-            }
-
-            return Task.FromResult<PackageIdentity>(null);
-        }
-
         public override async Task<bool> CopyNupkgToStreamAsync(
             string id,
             NuGetVersion version,

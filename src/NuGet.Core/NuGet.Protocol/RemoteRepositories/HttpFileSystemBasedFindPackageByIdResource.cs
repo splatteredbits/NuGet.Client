@@ -71,36 +71,6 @@ namespace NuGet.Protocol
             return packageInfos.Keys;
         }
 
-        public override async Task<PackageIdentity> GetOriginalIdentityAsync(
-            string id,
-            NuGetVersion version,
-            SourceCacheContext cacheContext,
-            ILogger logger,
-            CancellationToken cancellationToken)
-        {
-            var packageInfos = await EnsurePackagesAsync(id, cacheContext, logger, cancellationToken);
-
-            PackageInfo packageInfo;
-            if (!packageInfos.TryGetValue(version, out packageInfo))
-            {
-                return null;
-            }
-
-            return await _packageIdentityCache.GetOrAdd(
-                packageInfo.Identity,
-                async identity =>
-                {
-                    var reader = await _nupkgDownloader.GetNuspecReaderFromNupkgAsync(
-                        packageInfo.Identity,
-                        packageInfo.ContentUri,
-                        cacheContext,
-                        logger,
-                        cancellationToken);
-
-                    return reader.GetIdentity();
-                });
-        }
-
         public override async Task<FindPackageByIdDependencyInfo> GetDependencyInfoAsync(
             string id,
             NuGetVersion version,

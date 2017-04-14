@@ -76,31 +76,6 @@ namespace NuGet.Protocol
             return false;
         }
 
-        public override Task<PackageIdentity> GetOriginalIdentityAsync(
-            string id,
-            NuGetVersion version,
-            SourceCacheContext cacheContext,
-            ILogger logger,
-            CancellationToken token)
-        {
-            var matchedVersion = GetVersion(id, version, cacheContext, logger);
-            PackageIdentity outputIdentity = null;
-            if (matchedVersion != null)
-            {
-                outputIdentity = _packageIdentityCache.GetOrAdd(
-                   new PackageIdentity(id, matchedVersion),
-                   inputIdentity =>
-                   {
-                       return ProcessNuspecReader(
-                           inputIdentity.Id,
-                           inputIdentity.Version,
-                           nuspecReader => nuspecReader.GetIdentity());
-                   });
-            }
-
-            return Task.FromResult(outputIdentity);
-        }
-
         public override Task<FindPackageByIdDependencyInfo> GetDependencyInfoAsync(
             string id,
             NuGetVersion version,
