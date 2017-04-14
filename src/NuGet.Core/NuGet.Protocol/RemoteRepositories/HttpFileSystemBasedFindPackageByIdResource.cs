@@ -9,7 +9,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
 using NuGet.Common;
 using NuGet.Packaging.Core;
 using NuGet.Protocol.Core.Types;
@@ -33,8 +32,6 @@ namespace NuGet.Protocol
         private readonly HttpSource _httpSource;
         private readonly ConcurrentDictionary<string, Task<SortedDictionary<NuGetVersion, PackageInfo>>> _packageInfoCache =
             new ConcurrentDictionary<string, Task<SortedDictionary<NuGetVersion, PackageInfo>>>(StringComparer.OrdinalIgnoreCase);
-        private readonly ConcurrentDictionary<PackageIdentity, Task<PackageIdentity>> _packageIdentityCache
-            = new ConcurrentDictionary<PackageIdentity, Task<PackageIdentity>>();
         private readonly IReadOnlyList<Uri> _baseUris;
         private readonly FindPackagesByIdNupkgDownloader _nupkgDownloader;
 
@@ -90,10 +87,6 @@ namespace NuGet.Protocol
                     logger,
                     cancellationToken);
 
-                // Populate the package identity cache while we have the .nuspec open.
-                var identity = reader.GetIdentity();
-                _packageIdentityCache.TryAdd(identity, Task.FromResult(identity));
-
                 return GetDependencyInfo(reader);
             }
 
@@ -133,7 +126,7 @@ namespace NuGet.Protocol
         {
             Task<SortedDictionary<NuGetVersion, PackageInfo>> result = null;
 
-            Func<string, Task<SortedDictionary<NuGetVersion, PackageInfo>>> findPackages = 
+            Func<string, Task<SortedDictionary<NuGetVersion, PackageInfo>>> findPackages =
                 (keyId) => FindPackagesByIdAsync(
                                 keyId,
                                 cacheContext,

@@ -277,7 +277,7 @@ namespace NuGet.Protocol
                 catch (TaskCanceledException) when (retry < 2)
                 {
                     // Requests can get cancelled if we got the data from elsewhere, no reason to warn.
-                    string message = string.Format(CultureInfo.CurrentCulture, Strings.Log_CanceledNupkgDownload, url);
+                    var message = string.Format(CultureInfo.CurrentCulture, Strings.Log_CanceledNupkgDownload, url);
 
                     logger.LogMinimal(message);
                 }

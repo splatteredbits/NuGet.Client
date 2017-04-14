@@ -12,6 +12,7 @@ using NuGet.DependencyResolver;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
 using NuGet.Packaging;
+using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
@@ -112,7 +113,7 @@ namespace NuGet.Commands
                     logger,
                     cancellationToken);
             }
-            catch (FatalProtocolException e) when (_ignoreFailedSources )
+            catch (FatalProtocolException e) when (_ignoreFailedSources && !(e is InvalidCacheProtocolException))
             {
                 if (!_ignoreWarning)
                 {

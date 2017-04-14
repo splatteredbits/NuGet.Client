@@ -24,8 +24,6 @@ namespace NuGet.Protocol
         // Use cache insensitive compare for windows
         private readonly ConcurrentDictionary<string, List<NuGetVersion>> _cache
             = new ConcurrentDictionary<string, List<NuGetVersion>>(StringComparer.OrdinalIgnoreCase);
-        private readonly ConcurrentDictionary<PackageIdentity, PackageIdentity> _packageIdentityCache
-            = new ConcurrentDictionary<PackageIdentity, PackageIdentity>();
 
         private readonly string _source;
         private readonly VersionFolderPathResolver _resolver;
@@ -92,10 +90,6 @@ namespace NuGet.Protocol
                     matchedVersion,
                     nuspecReader =>
                     {
-                        // Populate the package identity cache while we have the .nuspec open.
-                        var identity = nuspecReader.GetIdentity();
-                        _packageIdentityCache.TryAdd(identity, identity);
-
                         return GetDependencyInfo(nuspecReader);
                     });
             }

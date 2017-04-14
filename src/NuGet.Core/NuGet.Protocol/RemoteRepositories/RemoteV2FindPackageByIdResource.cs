@@ -35,8 +35,6 @@ namespace NuGet.Protocol
         private readonly string _baseUri;
         private readonly HttpSource _httpSource;
         private readonly Dictionary<string, Task<IEnumerable<PackageInfo>>> _packageVersionsCache = new Dictionary<string, Task<IEnumerable<PackageInfo>>>(StringComparer.OrdinalIgnoreCase);
-        private readonly ConcurrentDictionary<PackageIdentity, Task<PackageIdentity>> _packageIdentityCache
-            = new ConcurrentDictionary<PackageIdentity, Task<PackageIdentity>>();
         private readonly FindPackagesByIdNupkgDownloader _nupkgDownloader;
 
         public RemoteV2FindPackageByIdResource(PackageSource packageSource, HttpSource httpSource)
@@ -80,11 +78,6 @@ namespace NuGet.Protocol
                 cacheContext,
                 logger,
                 cancellationToken);
-
-            // Populate the package identity cache while we have the .nuspec open.
-            _packageIdentityCache.TryAdd(
-                new PackageIdentity(id, version),
-                Task.FromResult(reader.GetIdentity()));
 
             return GetDependencyInfo(reader);
         }

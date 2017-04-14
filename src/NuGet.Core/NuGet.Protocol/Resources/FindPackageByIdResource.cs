@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Common;
 using NuGet.Packaging;
-using NuGet.Packaging.Core;
 using NuGet.Versioning;
 
 namespace NuGet.Protocol.Core.Types
