@@ -167,7 +167,7 @@ namespace NuGet.Protocol
 
             lock (_packageVersionsCache)
             {
-                if (!_packageVersionsCache.TryGetValue(id, out task))
+                if (cacheContext.RefreshMemoryCache || !_packageVersionsCache.TryGetValue(id, out task))
                 {
                     task = FindPackagesByIdAsyncCore(id, cacheContext, logger, cancellationToken);
                     _packageVersionsCache[id] = task;
@@ -267,7 +267,7 @@ namespace NuGet.Protocol
                 }
                 catch (Exception ex) when (retry < 2)
                 {
-                    string message = string.Format(CultureInfo.CurrentCulture, Strings.Log_RetryingFindPackagesById, nameof(FindPackagesByIdAsyncCore), uri)
+                    var message = string.Format(CultureInfo.CurrentCulture, Strings.Log_RetryingFindPackagesById, nameof(FindPackagesByIdAsyncCore), uri)
                         + Environment.NewLine
                         + ExceptionUtilities.DisplayMessage(ex);
                     logger.LogMinimal(message);

@@ -161,11 +161,27 @@ namespace NuGet.Protocol
             ILogger logger,
             CancellationToken cancellationToken)
         {
-            return _packageInfoCache.GetOrAdd(id, (keyId) => FindPackagesByIdAsync(
-                keyId,
-                cacheContext,
-                logger,
-                cancellationToken));
+            Task<SortedDictionary<NuGetVersion, PackageInfo>> result = null;
+
+            Func<string, Task<SortedDictionary<NuGetVersion, PackageInfo>>> findPackages = 
+                (keyId) => FindPackagesByIdAsync(
+                                keyId,
+                                cacheContext,
+                                logger,
+                                cancellationToken);
+
+            if (cacheContext.RefreshMemoryCache)
+            {
+                // Update the cache
+                result = _packageInfoCache.AddOrUpdate(id, findPackages, (k, v) => findPackages(id));
+            }
+            else
+            {
+                // Read the cache if it exists
+                result = _packageInfoCache.GetOrAdd(id, findPackages);
+            }
+
+            return result;
         }
 
         private async Task<SortedDictionary<NuGetVersion, PackageInfo>> FindPackagesByIdAsync(
@@ -246,7 +262,7 @@ namespace NuGet.Protocol
 
         private async Task<SortedDictionary<NuGetVersion, PackageInfo>> ConsumeFlatContainerIndexAsync(Stream stream, string id, string baseUri)
         {
-            JObject doc = await stream.AsJObjectAsync();
+            var doc = await stream.AsJObjectAsync();
 
             var streamResults = new SortedDictionary<NuGetVersion, PackageInfo>();
 

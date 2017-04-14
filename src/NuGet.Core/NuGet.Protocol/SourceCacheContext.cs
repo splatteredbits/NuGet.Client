@@ -42,6 +42,13 @@ namespace NuGet.Protocol.Core.Types
         public DateTimeOffset? MaxAge { get; set; }
 
         /// <summary>
+        /// Force the in-memory cache to reload. This avoids allowing other calls to populate
+        /// the memory cache again from cached files on disk using a different source context.
+        /// This should only be used for retries.
+        /// </summary>
+        public bool RefreshMemoryCache { get; set; }
+
+        /// <summary>
         /// Package version lists from the server older than this time span
         /// will be fetched from the server.
         /// </summary>
@@ -91,18 +98,36 @@ namespace NuGet.Protocol.Core.Types
                         "TempCache",
                         Guid.NewGuid().ToString());
 
-                    Interlocked.CompareExchange(ref _generatedTempFolder, newTempFolder, null);
+                    Interlocked.CompareExchange(ref _generatedTempFolder, newTempFolder, comparand: null);
                 }
 
                 return _generatedTempFolder;
             }
+
+            set => Interlocked.CompareExchange(ref _generatedTempFolder, value, comparand: null);
         }
 
         public bool IgnoreFailedSources { get; set; }
 
+        /// <summary>
+        /// Clones the current SourceCacheContext.
+        /// </summary>
+        public virtual SourceCacheContext Clone()
+        {
+            return new SourceCacheContext()
+            {
+                DirectDownload = DirectDownload,
+                IgnoreFailedSources = IgnoreFailedSources,
+                MaxAge = MaxAge,
+                NoCache = NoCache,
+                GeneratedTempFolder = _generatedTempFolder,
+                RefreshMemoryCache = RefreshMemoryCache
+            };
+        }
+
         public void Dispose()
         {
-            var currentTempFolder = Interlocked.CompareExchange(ref _generatedTempFolder, null, null);
+            var currentTempFolder = Interlocked.CompareExchange(ref _generatedTempFolder, value: null, comparand: null);
 
             if (currentTempFolder != null)
             {

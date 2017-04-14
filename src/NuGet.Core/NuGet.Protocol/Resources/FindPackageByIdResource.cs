@@ -78,6 +78,7 @@ namespace NuGet.Protocol.Core.Types
 
             // Create dependency info
             return new FindPackageByIdDependencyInfo(
+                reader.GetIdentity(),
                 reader.GetDependencyGroups(),
                 reader.GetFrameworkReferenceGroups());
         }
