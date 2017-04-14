@@ -13,6 +13,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Microsoft.CSharp.RuntimeBinder;
 using Microsoft.VisualStudio.Shell.Interop;
+using Newtonsoft.Json.Linq;
 using NuGet.Common;
 using NuGet.Frameworks;
 using NuGet.Packaging.Core;
@@ -386,12 +387,23 @@ namespace NuGet.PackageManagement.VisualStudio
             });
         }
 
+        private static object LockObj = new object();
+        private static string LogPath = @"d:\tmp\addReference.txt";
+
         public virtual void AddReference(string referencePath)
         {
             if (referencePath == null)
             {
                 throw new ArgumentNullException(nameof(referencePath));
             }
+
+            var getRefs = new Stopwatch();
+            var addRef = new Stopwatch();
+            var fixRef = new Stopwatch();
+            var xmlRef = new Stopwatch();
+
+            var outerTimer = new Stopwatch();
+            outerTimer.Start();
 
             var name = Path.GetFileNameWithoutExtension(referencePath);
             var projectName = string.Empty;
@@ -417,13 +429,19 @@ namespace NuGet.PackageManagement.VisualStudio
                     // Get the full path to the reference
                     assemblyFullPath = Path.Combine(projectFullPath, referencePath);
 
+                    getRefs.Start();
                     // Add a reference to the project
                     var references = EnvDTEProjectUtility.GetReferences(EnvDTEProject);
+                    getRefs.Stop();
 
+                    addRef.Start();
                     dynamic reference = references.Add(assemblyFullPath);
+                    addRef.Stop();
 
                     if (reference != null)
                     {
+                        fixRef.Start();
+
                         dteOriginalPath = GetReferencePath(reference);
 
                         // If path != fullPath, we need to set CopyLocal thru msbuild by setting Private
@@ -440,11 +458,15 @@ namespace NuGet.PackageManagement.VisualStudio
                             TrySetCopyLocal(reference);
                             TrySetSpecificVersion(reference);
                         }
+
+                        fixRef.Stop();
                     }
                 });
 
                 if (!resolvedToPackage)
                 {
+                    xmlRef.Start();
+
                     // This should be done off the UI thread
 
                     // Get the msbuild project for this project
@@ -495,12 +517,48 @@ namespace NuGet.PackageManagement.VisualStudio
                             Strings.FailedToAddReference,
                             name);
                     }
+
+                    xmlRef.Stop();
                 }
             }
             catch (Exception e)
             {
                 throw new InvalidOperationException(
                     string.Format(CultureInfo.CurrentCulture, Strings.FailedToAddReference, name), e);
+            }
+
+            outerTimer.Stop();
+            
+            lock (LockObj)
+            {
+                var json = new JObject();
+
+                if (File.Exists(LogPath))
+                {
+                    json = JObject.Parse(File.ReadAllText(LogPath));
+                }
+                else
+                {
+                    json["entries"] = new JArray();
+                }
+
+                var array = (JArray)json["entries"];
+
+                var entry = new JObject()
+                {
+                    new JProperty("project", projectFullPath),
+                    new JProperty("assembly", assemblyFullPath),
+                    new JProperty("originalPath", dteOriginalPath),
+                    new JProperty("total", outerTimer.Elapsed.ToString()),
+                    new JProperty("getRefs", getRefs.Elapsed.ToString()),
+                    new JProperty("addRef", addRef.Elapsed.ToString()),
+                    new JProperty("fixRef", fixRef.Elapsed.ToString()),
+                    new JProperty("xmlRef", xmlRef.Elapsed.ToString()),
+                };
+
+                array.Add(entry);
+
+                File.WriteAllText(LogPath, json.ToString());
             }
 
             NuGetProjectContext.Log(
