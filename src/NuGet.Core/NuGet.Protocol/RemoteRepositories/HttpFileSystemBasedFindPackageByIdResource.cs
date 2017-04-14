@@ -30,8 +30,8 @@ namespace NuGet.Protocol
     {
         private const int MaxRetries = 3;
         private readonly HttpSource _httpSource;
-        private readonly ConcurrentDictionary<string, Task<SortedDictionary<NuGetVersion, PackageInfo>>> _packageInfoCache =
-            new ConcurrentDictionary<string, Task<SortedDictionary<NuGetVersion, PackageInfo>>>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, AsyncLazy<SortedDictionary<NuGetVersion, PackageInfo>>> _packageInfoCache =
+            new ConcurrentDictionary<string, AsyncLazy<SortedDictionary<NuGetVersion, PackageInfo>>>(StringComparer.OrdinalIgnoreCase);
         private readonly IReadOnlyList<Uri> _baseUris;
         private readonly FindPackagesByIdNupkgDownloader _nupkgDownloader;
 
@@ -118,20 +118,20 @@ namespace NuGet.Protocol
             return false;
         }
 
-        private Task<SortedDictionary<NuGetVersion, PackageInfo>> EnsurePackagesAsync(
+        private async Task<SortedDictionary<NuGetVersion, PackageInfo>> EnsurePackagesAsync(
             string id,
             SourceCacheContext cacheContext,
             ILogger logger,
             CancellationToken cancellationToken)
         {
-            Task<SortedDictionary<NuGetVersion, PackageInfo>> result = null;
+            AsyncLazy<SortedDictionary<NuGetVersion, PackageInfo>> result = null;
 
-            Func<string, Task<SortedDictionary<NuGetVersion, PackageInfo>>> findPackages =
-                (keyId) => FindPackagesByIdAsync(
+            Func<string, AsyncLazy<SortedDictionary<NuGetVersion, PackageInfo>>> findPackages =
+                (keyId) => new AsyncLazy<SortedDictionary<NuGetVersion, PackageInfo>>(() => FindPackagesByIdAsync(
                                 keyId,
                                 cacheContext,
                                 logger,
-                                cancellationToken);
+                                cancellationToken));
 
             if (cacheContext.RefreshMemoryCache)
             {
@@ -144,7 +144,7 @@ namespace NuGet.Protocol
                 result = _packageInfoCache.GetOrAdd(id, findPackages);
             }
 
-            return result;
+            return await result;
         }
 
         private async Task<SortedDictionary<NuGetVersion, PackageInfo>> FindPackagesByIdAsync(

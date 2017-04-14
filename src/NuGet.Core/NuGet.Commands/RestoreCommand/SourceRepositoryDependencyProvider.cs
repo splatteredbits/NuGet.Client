@@ -1,6 +1,8 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -14,6 +16,7 @@ using NuGet.LibraryModel;
 using NuGet.Packaging;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
+using NuGet.Shared;
 using NuGet.Versioning;
 
 namespace NuGet.Commands
@@ -27,6 +30,15 @@ namespace NuGet.Commands
         private FindPackageByIdResource _findPackagesByIdResource;
         private bool _ignoreFailedSources;
         private bool _ignoreWarning;
+
+        private readonly ConcurrentDictionary<DependencyInfoCacheKey, AsyncLazy<LibraryDependencyInfo>> _dependencyInfoCache
+            = new ConcurrentDictionary<DependencyInfoCacheKey, AsyncLazy<LibraryDependencyInfo>>();
+
+        private readonly ConcurrentDictionary<LibraryRange, AsyncLazy<LibraryIdentity>> _libraryMatchCache
+            = new ConcurrentDictionary<LibraryRange, AsyncLazy<LibraryIdentity>>();
+
+        private readonly ConcurrentDictionary<string, AsyncLazy<IEnumerable<NuGetVersion>>> _versionCache
+            = new ConcurrentDictionary<string, AsyncLazy<IEnumerable<NuGetVersion>>>(StringComparer.OrdinalIgnoreCase);
 
         // Limiting concurrent requests to limit the amount of files open at a time on Mac OSX
         // the default is 256 which is easy to hit if we don't limit concurrency
@@ -67,10 +79,34 @@ namespace NuGet.Commands
             ILogger logger,
             CancellationToken cancellationToken)
         {
+            AsyncLazy<LibraryIdentity> result = null;
+
+            var action = new AsyncLazy<LibraryIdentity>(async () =>
+                await FindLibraryCoreAsync(libraryRange, targetFramework, cacheContext, logger, cancellationToken));
+
+            if (cacheContext.RefreshMemoryCache)
+            {
+                result = _libraryMatchCache.AddOrUpdate(libraryRange, action, (k, v) => action);
+            }
+            else
+            {
+                result = _libraryMatchCache.GetOrAdd(libraryRange, action);
+            }
+
+            return await result;
+        }
+
+        public async Task<LibraryIdentity> FindLibraryCoreAsync(
+            LibraryRange libraryRange,
+            NuGetFramework targetFramework,
+            SourceCacheContext cacheContext,
+            ILogger logger,
+            CancellationToken cancellationToken)
+        {
             await EnsureResource();
 
             // Discover all versions from the feed
-            var packageVersions = await GetPackageVersions(libraryRange.Name, cacheContext, logger, cancellationToken);
+            var packageVersions = await GetPackageVersionsAsync(libraryRange.Name, cacheContext, logger, cancellationToken);
 
             // Select the best match
             var packageVersion = packageVersions?.FindBestMatch(libraryRange.VersionRange, version => version);
@@ -89,6 +125,32 @@ namespace NuGet.Commands
         }
 
         public async Task<LibraryDependencyInfo> GetDependenciesAsync(
+            LibraryIdentity match,
+            NuGetFramework targetFramework,
+            SourceCacheContext cacheContext,
+            ILogger logger,
+            CancellationToken cancellationToken)
+        {
+            AsyncLazy<LibraryDependencyInfo> result = null;
+
+            var action = new AsyncLazy<LibraryDependencyInfo>(async () => 
+                await GetDependenciesCoreAsync(match, targetFramework, cacheContext, logger, cancellationToken));
+
+            var key = new DependencyInfoCacheKey(match, targetFramework);
+
+            if (cacheContext.RefreshMemoryCache)
+            {
+                result = _dependencyInfoCache.AddOrUpdate(key, action, (k,v) => action);
+            }
+            else
+            {
+                result = _dependencyInfoCache.GetOrAdd(key, action);
+            }
+
+            return await result;
+        }
+
+        private async Task<LibraryDependencyInfo> GetDependenciesCoreAsync(
             LibraryIdentity match,
             NuGetFramework targetFramework,
             SourceCacheContext cacheContext,
@@ -229,7 +291,29 @@ namespace NuGet.Commands
         /// <summary>
         /// Discover all package versions from a feed.
         /// </summary>
-        private async Task<IEnumerable<NuGetVersion>> GetPackageVersions(string id,
+        private async Task<IEnumerable<NuGetVersion>> GetPackageVersionsAsync(string id,
+                                                                    SourceCacheContext cacheContext,
+                                                                    ILogger logger,
+                                                                    CancellationToken cancellationToken)
+        {
+            AsyncLazy<IEnumerable<NuGetVersion>> result = null;
+
+            var action = new AsyncLazy<IEnumerable<NuGetVersion>>(async () =>
+                await GetPackageVersionsCoreAsync(id, cacheContext, logger, cancellationToken));
+
+            if (cacheContext.RefreshMemoryCache)
+            {
+                result = _versionCache.AddOrUpdate(id, action, (k, v) => action);
+            }
+            else
+            {
+                result = _versionCache.GetOrAdd(id, action);
+            }
+
+            return await result;
+        }
+
+        private async Task<IEnumerable<NuGetVersion>> GetPackageVersionsCoreAsync(string id,
                                                                     SourceCacheContext cacheContext,
                                                                     ILogger logger,
                                                                     CancellationToken cancellationToken)
@@ -261,6 +345,47 @@ namespace NuGet.Commands
             }
 
             return packageVersions;
+        }
+
+        private class DependencyInfoCacheKey : IEquatable<DependencyInfoCacheKey>
+        {
+            public LibraryRange LibraryRange { get; }
+
+            public NuGetFramework TargetFramework { get; }
+
+            public DependencyInfoCacheKey(
+                LibraryRange libraryRange,
+                NuGetFramework targetFramework)
+            {
+                LibraryRange = libraryRange;
+                TargetFramework = targetFramework;
+            }
+
+            public override int GetHashCode()
+            {
+                return HashCodeCombiner.GetHashCode(LibraryRange, TargetFramework);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return Equals(obj as DependencyInfoCacheKey);
+            }
+
+            public bool Equals(DependencyInfoCacheKey other)
+            {
+                if (other == null)
+                {
+                    return false;
+                }
+
+                if (ReferenceEquals(this, other))
+                {
+                    return true;
+                }
+
+                return LibraryRange.Equals(other.LibraryRange)
+                    && TargetFramework.Equals(other.TargetFramework);
+            }
         }
     }
 }
