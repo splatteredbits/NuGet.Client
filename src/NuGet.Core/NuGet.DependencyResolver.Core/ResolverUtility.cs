@@ -42,6 +42,10 @@ namespace NuGet.DependencyResolver
             GraphItem<RemoteResolveResult> graphItem = null;
             var currentCacheContext = context.CacheContext;
 
+            // Try up to two times to get the package. The second
+            // retry will refresh the cache if a package is listed 
+            // but fails to download. This can happen if the feed prunes
+            // the package.
             for (var i = 0; i < 2 && graphItem == null; i++)
             {
                 var match = await FindLibraryMatchAsync(
