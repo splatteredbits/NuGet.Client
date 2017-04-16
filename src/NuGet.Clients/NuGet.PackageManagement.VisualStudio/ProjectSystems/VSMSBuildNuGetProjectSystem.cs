@@ -388,7 +388,7 @@ namespace NuGet.PackageManagement.VisualStudio
         }
 
         private static object LockObj = new object();
-        private static string LogPath = @"d:\tmp\addReference.txt";
+        private static string LogPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @"addReference.json");
 
         public virtual void AddReference(string referencePath)
         {
