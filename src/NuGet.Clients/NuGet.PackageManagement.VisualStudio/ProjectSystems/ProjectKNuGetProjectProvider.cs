@@ -52,7 +52,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
         public static INuGetPackageManager GetProjectKProject(IVsProjectAdapter project)
         {
-            return GetProjectKProject(project.DteProject);
+            return !project.IsLoadDeferred ? GetProjectKProject(project.DteProject) : null;
         }
 
         public static INuGetPackageManager GetProjectKProject(EnvDTE.Project project)

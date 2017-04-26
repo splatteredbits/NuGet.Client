@@ -61,7 +61,7 @@ namespace NuGet.PackageManagement.VisualStudio
             result = null;
 
             // The project must be an IVsHierarchy.
-            var hierarchy = vsProject.IVsHierarchy;
+            var hierarchy = vsProject.VsHierarchy;
             
             if (hierarchy == null)
             {

@@ -1,14 +1,13 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft;
 using NuGet.ProjectManagement;
 using NuGet.ProjectModel;
 using NuGet.VisualStudio;
-using EnvDTEProject = EnvDTE.Project;
 
 namespace NuGet.PackageManagement.VisualStudio
 {
@@ -19,7 +18,7 @@ namespace NuGet.PackageManagement.VisualStudio
     /// </summary>
     public class VSMSBuildNuGetProject : MSBuildNuGetProject
     {
-        private readonly IVsProjectAdapter _project;
+        private readonly IVsProjectAdapter _vsProjectAdapter;
 
         public VSMSBuildNuGetProject(
             IVsProjectAdapter project,
@@ -30,7 +29,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 folderNuGetProjectPath,
                 packagesConfigFolderPath)
         {
-            _project = project;
+            _vsProjectAdapter = project;
 
             // set project id
             var projectId = project.ProjectId;
@@ -39,13 +38,10 @@ namespace NuGet.PackageManagement.VisualStudio
 
         public override Task<IReadOnlyList<ProjectRestoreReference>> GetDirectProjectReferencesAsync(DependencyGraphCacheContext context)
         {
-            if (context == null)
-            {
-                throw new ArgumentNullException(nameof(context));
-            }
+            Assumes.Present(context);
 
             var resolvedProjects = context.DeferredPackageSpecs.Select(project => project.Name);
-            return VSProjectRestoreReferenceUtility.GetDirectProjectReferencesAsync(_project.DteProject, resolvedProjects, context.Logger);
+            return VSProjectRestoreReferenceUtility.GetDirectProjectReferencesAsync(_vsProjectAdapter.DteProject, resolvedProjects, context.Logger);
         }
     }
 }

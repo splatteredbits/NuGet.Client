@@ -3,10 +3,13 @@
 
 using System;
 using System.ComponentModel.Composition;
+using System.IO;
+using System.Threading.Tasks;
 using Microsoft;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Threading;
 using NuGet.VisualStudio;
 
 namespace NuGet.PackageManagement.VisualStudio
@@ -14,14 +17,23 @@ namespace NuGet.PackageManagement.VisualStudio
     [Export(typeof(IVsProjectAdapterProvider))]
     internal class VsProjectAdapterProvider : IVsProjectAdapterProvider
     {
+        private readonly IServiceProvider _serviceProvider;
         private readonly IDeferredProjectWorkspaceService _deferredProjectWorkspaceService;
 
-        [ImportingConstructor]
-        public VsProjectAdapterProvider(IDeferredProjectWorkspaceService dpws)
-        {
-            Assumes.Present(dpws);
+        private readonly Lazy<IVsSolution> _vsSolution;
 
-            _deferredProjectWorkspaceService = dpws;
+        [ImportingConstructor]
+        public VsProjectAdapterProvider(
+            [Import(typeof(SVsServiceProvider))]
+            IServiceProvider serviceProvider,
+            IDeferredProjectWorkspaceService deferredProjectWorkspaceService)
+        {
+            Assumes.Present(serviceProvider);
+            Assumes.Present(deferredProjectWorkspaceService);
+
+            _serviceProvider = serviceProvider;
+            _deferredProjectWorkspaceService = deferredProjectWorkspaceService;
+            _vsSolution = new Lazy<IVsSolution>(() => _serviceProvider.GetService<SVsSolution, IVsSolution>());
         }
 
         public IVsProjectAdapter CreateVsProject(EnvDTE.Project dteProject)
@@ -31,20 +43,53 @@ namespace NuGet.PackageManagement.VisualStudio
             return new VsProjectAdapter(dteProject, this);
         }
 
-        public IVsProjectAdapter CreateVsProject(IVsHierarchy project, Func<EnvDTE.Project> loadDTEProject)
+        public async Task<IVsProjectAdapter> CreateVsProjectAsync(IVsHierarchy project)
         {
             Assumes.Present(project);
-            Assumes.Present(loadDTEProject);
 
-            return new VsProjectAdapter(GetDeferredProjectPath(project), loadDTEProject, this, _deferredProjectWorkspaceService);
+            await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            var projectPath = VsHierarchyUtility.GetProjectPath(project);
+
+            var uniqueName = string.Empty;
+            _vsSolution.Value.GetUniqueNameOfProject(project, out uniqueName);
+
+            var projectNames = new ProjectNames(
+                fullName: projectPath,
+                uniqueName: uniqueName,
+                shortName: Path.GetFileNameWithoutExtension(projectPath),
+                customUniqueName: uniqueName);
+
+            return new VsProjectAdapter(project, projectNames, EnsureProjectIsLoaded, this, _deferredProjectWorkspaceService);
         }
 
-        private string GetDeferredProjectPath(IVsHierarchy project)
+        private EnvDTE.Project EnsureProjectIsLoaded(IVsHierarchy project)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
+            return NuGetUIThreadHelper.JoinableTaskFactory.Run(async () =>
+            {
+                await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-            project.GetCanonicalName(VSConstants.VSITEMID_ROOT, out string projectPath);
-            return projectPath;
+                // 1. Ask the solution to load the required project. To reduce wait time,
+                //    we load only the project we need, not the entire solution.
+                var hr = project.GetGuidProperty((uint)VSConstants.VSITEMID.Root, (int)__VSHPROPID.VSHPROPID_ProjectIDGuid, out Guid projectGuid);
+                ErrorHandler.ThrowOnFailure(hr);
+                hr = ((IVsSolution4)_vsSolution).EnsureProjectIsLoaded(projectGuid, (uint)__VSBSLFLAGS.VSBSLFLAGS_None);
+                ErrorHandler.ThrowOnFailure(hr);
+
+                // 2. After the project is loaded, grab the latest IVsHierarchy object.
+                hr = _vsSolution.Value.GetProjectOfGuid(projectGuid, out IVsHierarchy loadedProject);
+                ErrorHandler.ThrowOnFailure(hr);
+
+                Assumes.Present(loadedProject);
+
+                object extObject = null;
+                hr = loadedProject.GetProperty((uint)VSConstants.VSITEMID.Root, (int)__VSHPROPID.VSHPROPID_ExtObject, out extObject);
+                ErrorHandler.ThrowOnFailure(hr);
+
+                var dteProject = extObject as EnvDTE.Project;
+
+                return dteProject;
+            });
         }
     }
 }

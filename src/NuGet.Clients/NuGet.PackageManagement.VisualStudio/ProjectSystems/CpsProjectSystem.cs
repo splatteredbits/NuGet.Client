@@ -48,7 +48,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
             await ProjectHelper.DoWorkInWriterLockAsync(
                 VsProjectAdapter.DteProject,
-                VsProjectAdapter.IVsHierarchy,
+                VsProjectAdapter.VsHierarchy,
                 buildProject => MicrosoftBuildEvaluationProjectUtility.AddImportStatement(buildProject, relativeTargetPath, location));
 
             // notify the project system of the change
@@ -82,7 +82,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
             await ProjectHelper.DoWorkInWriterLockAsync(
                 VsProjectAdapter.DteProject,
-                VsProjectAdapter.IVsHierarchy,
+                VsProjectAdapter.VsHierarchy,
                 buildProject => MicrosoftBuildEvaluationProjectUtility.RemoveImportStatement(buildProject, relativeTargetPath));
 
             // notify the project system of the change

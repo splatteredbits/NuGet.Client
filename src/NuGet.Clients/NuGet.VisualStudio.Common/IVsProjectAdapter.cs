@@ -19,7 +19,7 @@ namespace NuGet.VisualStudio
         string FullName { get; }
         string FullPath { get; }
         string FullProjectPath { get; }
-        IVsHierarchy IVsHierarchy { get; }
+        bool IsLoadDeferred { get; }
         bool IsSupported { get; }
         IVsProjectBuildSystem ProjectBuildSystem { get; }
         string ProjectId { get; }
@@ -29,10 +29,7 @@ namespace NuGet.VisualStudio
         string UniqueName { get; }
 
         EnvDTE.Project DteProject { get; }
-
-        Task<bool> ContainsFile(string path);
-        bool SupportsBindingRedirects();
-        bool SupportsReference { get; }
+        IVsHierarchy VsHierarchy { get; }
 
         HashSet<string> GetAssemblyClosure(IDictionary<string, HashSet<string>> visitedProjects);
         IEnumerable<string> GetChildItems(string path, string filter, string desiredKind);
@@ -46,6 +43,10 @@ namespace NuGet.VisualStudio
         IList<IVsProjectAdapter> GetReferencedProjects();
         NuGetFramework GetTargetNuGetFramework();
         UnconfiguredProject GetUnconfiguredProject();
+
+        Task<bool> ContainsFile(string path);
+        bool SupportsBindingRedirects();
+        bool SupportsReference { get; }
 
         void AddImportStatement(string targetsPath, ImportLocation location);
         Task<bool> DeleteProjectItemAsync(string path);

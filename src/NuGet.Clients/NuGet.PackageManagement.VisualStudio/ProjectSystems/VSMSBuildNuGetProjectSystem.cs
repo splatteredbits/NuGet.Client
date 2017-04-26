@@ -764,7 +764,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            var propStore = vsProjectAdapter.IVsHierarchy as IVsBuildPropertyStorage;
+            var propStore = vsProjectAdapter.VsHierarchy as IVsBuildPropertyStorage;
             if (propStore != null)
             {
                 // <NuGetPackageImportStamp>af617720</NuGetPackageImportStamp>

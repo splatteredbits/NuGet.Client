@@ -305,7 +305,7 @@ namespace NuGet.PackageManagement.VisualStudio
             {
                 await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 var safeName = GetNuGetProjectSafeName(nuGetProject);
-                EnvDTEProjectUtility.Save(GetVsProjectAdapter(safeName).DteProject);
+                GetVsProjectAdapter(safeName)?.Save();
             });
         }
 
@@ -496,38 +496,6 @@ namespace NuGet.PackageManagement.VisualStudio
             });
         }
 
-        private EnvDTE.Project EnsureProjectIsLoaded(IVsHierarchy project)
-        {
-            return NuGetUIThreadHelper.JoinableTaskFactory.Run(async delegate
-            {
-                await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-                var hr = VSConstants.S_OK;
-
-                // 1. Ask the solution to load the required project. To reduce wait time,
-                //    we load only the project we need, not the entire solution.
-                hr = project.GetGuidProperty((uint)VSConstants.VSITEMID.Root, (int)__VSHPROPID.VSHPROPID_ProjectIDGuid, out Guid projectGuid);
-                hr = ErrorHandler.ThrowOnFailure(hr);
-                hr = ((IVsSolution4)_vsSolution).EnsureProjectIsLoaded(projectGuid, (uint)__VSBSLFLAGS.VSBSLFLAGS_None);
-                hr = ErrorHandler.ThrowOnFailure(hr);
-
-                // 2. After the project is loaded, grab the latest IVsHierarchy object.
-                hr = _vsSolution.GetProjectOfGuid(projectGuid, out IVsHierarchy loadedProject);
-                hr = ErrorHandler.ThrowOnFailure(hr);
-
-                if (loadedProject != null)
-                {
-                    if (ErrorHandler.Succeeded(loadedProject.GetProperty((uint)VSConstants.VSITEMID.Root, (int)__VSHPROPID.VSHPROPID_ExtObject, out object extObject)))
-                    {
-                        var dteProject = extObject as EnvDTE.Project;
-
-                        return dteProject;
-                    }
-                }
-                return null;
-            });
-        }
-
         public string SolutionDirectory
         {
             get
@@ -657,7 +625,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 return;
             }
 
-            EnsureNuGetAndVsProjectAdapterCache();
+            NuGetUIThreadHelper.JoinableTaskFactory.Run(EnsureNuGetAndVsProjectAdapterCacheAsync);
 
             SolutionOpened?.Invoke(this, EventArgs.Empty);
 
@@ -724,7 +692,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
             if (!string.IsNullOrEmpty(oldName) && IsSolutionOpen && _solutionOpenedRaised)
             {
-                EnsureNuGetAndVsProjectAdapterCache();
+                NuGetUIThreadHelper.JoinableTaskFactory.Run(EnsureNuGetAndVsProjectAdapterCacheAsync);
 
                 if (EnvDTEProjectUtility.IsSupported(envDTEProject))
                 {
@@ -782,7 +750,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 && !EnvDTEProjectUtility.IsParentProjectExplicitlyUnsupported(envDTEProject)
                 && _solutionOpenedRaised)
             {
-                EnsureNuGetAndVsProjectAdapterCache();
+                NuGetUIThreadHelper.JoinableTaskFactory.Run(EnsureNuGetAndVsProjectAdapterCacheAsync);
                 AddVsProjectAdapterToCache(_vsProjectAdapterProvider.CreateVsProject(envDTEProject));
                 NuGetProject nuGetProject;
                 _projectSystemCache.TryGetNuGetProject(envDTEProject.Name, out nuGetProject);
@@ -817,7 +785,7 @@ namespace NuGet.PackageManagement.VisualStudio
             }
         }
 
-        private void EnsureNuGetAndVsProjectAdapterCache()
+        private async Task EnsureNuGetAndVsProjectAdapterCacheAsync()
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -831,7 +799,7 @@ namespace NuGet.PackageManagement.VisualStudio
                     {
                         try
                         {
-                            var vsProjectAdapter = _vsProjectAdapterProvider.CreateVsProject(project, () => EnsureProjectIsLoaded(project));
+                            var vsProjectAdapter = await _vsProjectAdapterProvider.CreateVsProjectAsync(project);
                             AddVsProjectAdapterToCache(vsProjectAdapter);
                         }
                         catch (Exception e)
@@ -980,7 +948,7 @@ namespace NuGet.PackageManagement.VisualStudio
                         NuGetUIThreadHelper.JoinableTaskFactory.Run(async delegate
                         {
                             await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                            EnsureNuGetAndVsProjectAdapterCache();
+                            await EnsureNuGetAndVsProjectAdapterCacheAsync();
                         });
                     }
                 }

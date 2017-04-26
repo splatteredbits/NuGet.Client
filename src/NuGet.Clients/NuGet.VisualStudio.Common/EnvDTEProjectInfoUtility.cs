@@ -288,31 +288,27 @@ namespace NuGet.VisualStudio
 
         public static async Task<string> GetCustomUniqueNameAsync(EnvDTE.Project envDTEProject)
         {
-            return await NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            if (IsWebSite(envDTEProject))
             {
-                await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                // website projects always have unique name
+                return envDTEProject.Name;
+            }
+            var nameParts = new Stack<string>();
 
-                if (IsWebSite(envDTEProject))
-                {
-                    // website projects always have unique name
-                    return envDTEProject.Name;
-                }
-                Stack<string> nameParts = new Stack<string>();
+            var cursor = envDTEProject;
+            nameParts.Push(GetName(cursor));
 
-                EnvDTE.Project cursor = envDTEProject;
+            // walk up till the solution root
+            while (cursor.ParentProjectItem != null
+                   && cursor.ParentProjectItem.ContainingProject != null)
+            {
+                cursor = cursor.ParentProjectItem.ContainingProject;
                 nameParts.Push(GetName(cursor));
+            }
 
-                // walk up till the solution root
-                while (cursor.ParentProjectItem != null
-                       && cursor.ParentProjectItem.ContainingProject != null)
-                {
-                    cursor = cursor.ParentProjectItem.ContainingProject;
-                    nameParts.Push(GetName(cursor));
-                }
-
-                return String.Join("\\", nameParts);
-            });
-            
+            return string.Join("\\", nameParts);
         }
 
         public static NuGetFramework GetTargetNuGetFramework(EnvDTE.Project envDTEProject)

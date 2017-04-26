@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Microsoft;
 using Microsoft.Build.Evaluation;
 using Microsoft.CSharp.RuntimeBinder;
 using Microsoft.VisualStudio;
@@ -440,9 +441,9 @@ namespace NuGet.PackageManagement.VisualStudio
 
         public static bool IsSupported(EnvDTE.Project envDTEProject)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
+            Assumes.Present(envDTEProject);
 
-            Debug.Assert(envDTEProject != null);
+            ThreadHelper.ThrowIfNotOnUIThread();
 
             if (SupportsINuGetProjectSystem(envDTEProject))
             {
@@ -721,7 +722,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 return false;
             }
 
-            EnvDTE.Project parentEnvDTEProject = envDTEProject.ParentProjectItem.ContainingProject;
+            var parentEnvDTEProject = envDTEProject.ParentProjectItem.ContainingProject;
             return IsExplicitlyUnsupported(parentEnvDTEProject);
         }
 

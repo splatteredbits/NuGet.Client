@@ -26,8 +26,8 @@ namespace NuGet.VisualStudio
             IVsHierarchy hierarchy;
 
             // Get the vs solution
-            IVsSolution solution = ServiceLocator.GetInstance<IVsSolution>();
-            int hr = solution.GetProjectOfUniqueName(EnvDTEProjectInfoUtility.GetUniqueName(project), out hierarchy);
+            var solution = ServiceLocator.GetInstance<IVsSolution>();
+            var hr = solution.GetProjectOfUniqueName(EnvDTEProjectInfoUtility.GetUniqueName(project), out hierarchy);
 
             if (hr != VSConstants.S_OK)
             {
@@ -69,26 +69,12 @@ namespace NuGet.VisualStudio
             return output;
         }
 
-        public static VsHierarchyItem GetHierarchyItemForProject(Project project)
-        {
-            Debug.Assert(ThreadHelper.CheckAccess());
-
-            return new VsHierarchyItem(ToVsHierarchy(project));
-        }
-
-        public static string GetProjectId(Project project)
+        public static string GetProjectPath(IVsHierarchy project)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            var hierarchyItem = GetHierarchyItemForProject(project);
-
-            Guid id;
-            if (!hierarchyItem.TryGetProjectId(out id))
-            {
-                id = Guid.Empty;
-            }
-
-            return id.ToString();
+            project.GetCanonicalName(VSConstants.VSITEMID_ROOT, out string projectPath);
+            return projectPath;
         }
 
         public static string[] GetProjectTypeGuids(Project project)
@@ -97,17 +83,12 @@ namespace NuGet.VisualStudio
 
             // Get the vs hierarchy as an IVsAggregatableProject to get the project type guids
             var hierarchy = ToVsHierarchy(project);
-            var projectTypeGuids = GetProjectTypeGuids(hierarchy);
-
-            if (projectTypeGuids.Length == 0 && !string.IsNullOrEmpty(project.Kind))
-            {
-                return new[] { project.Kind };
-            }
+            var projectTypeGuids = GetProjectTypeGuids(hierarchy, project.Kind);
 
             return projectTypeGuids;
         }
 
-        public static string[] GetProjectTypeGuids(IVsHierarchy hierarchy)
+        public static string[] GetProjectTypeGuids(IVsHierarchy hierarchy, string defaultType = "")
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -119,6 +100,11 @@ namespace NuGet.VisualStudio
                 ErrorHandler.ThrowOnFailure(hr);
 
                 return projectTypeGuids.Split(';');
+            }
+
+            if (!string.IsNullOrEmpty(defaultType))
+            {
+                return new[] { defaultType };
             }
 
             return new string[0];
@@ -188,10 +174,10 @@ namespace NuGet.VisualStudio
 
         private static ICollection<VsHierarchyItem> GetExpandedProjectHierarchyItems(Project project)
         {
-            Debug.Assert(ThreadHelper.CheckAccess());
+            ThreadHelper.ThrowIfNotOnUIThread();
 
-            VsHierarchyItem projectHierarchyItem = GetHierarchyItemForProject(project);
-            IVsUIHierarchyWindow solutionExplorerWindow = GetSolutionExplorerHierarchyWindow();
+            var projectHierarchyItem = VsHierarchyItem.FromDteProject(project);
+            var solutionExplorerWindow = GetSolutionExplorerHierarchyWindow();
 
             if (solutionExplorerWindow == null)
             {
@@ -224,10 +210,10 @@ namespace NuGet.VisualStudio
 
         private static void CollapseProjectHierarchyItems(Project project, ISet<VsHierarchyItem> ignoredHierarcyItems)
         {
-            Debug.Assert(ThreadHelper.CheckAccess());
+            ThreadHelper.ThrowIfNotOnUIThread();
 
-            VsHierarchyItem projectHierarchyItem = GetHierarchyItemForProject(project);
-            IVsUIHierarchyWindow solutionExplorerWindow = GetSolutionExplorerHierarchyWindow();
+            var projectHierarchyItem = VsHierarchyItem.FromDteProject(project);
+            var solutionExplorerWindow = GetSolutionExplorerHierarchyWindow();
 
             if (solutionExplorerWindow == null)
             {

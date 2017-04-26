@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
@@ -19,31 +20,20 @@ using NuGet.VisualStudio;
 
 namespace NuGet.PackageManagement.VisualStudio
 {
+    [DebuggerDisplay("{ProjectName}")]
     internal class VsProjectAdapter : IVsProjectAdapter
     {
-        private readonly EnvDTE.Project _dteProject;
-        private readonly Func<EnvDTE.Project> _loadDTEProject;
+        private readonly VsHierarchyItem _vsHierarchyItem;
+        private EnvDTE.Project _dteProject;
+        private readonly Func<IVsHierarchy, EnvDTE.Project> _loadDteProject;
         private readonly IVsProjectAdapterProvider _vsProjectAdapterProvider;
         private readonly IDeferredProjectWorkspaceService _deferredProjectWorkspaceService;
 
-        private string _fullProjectPath;
+        #region Properties
 
-        public string CustomUniqueName => EnvDTEProjectInfoUtility.GetCustomUniqueName(_dteProject);
+        public string CustomUniqueName => ProjectNames.CustomUniqueName;
 
-        public string FullName
-        {
-            get
-            {
-                if (_dteProject != null)
-                {
-                    return _dteProject.FullName;
-                }
-                else
-                {
-                    return _fullProjectPath;
-                }
-            }
-        }
+        public string FullName => ProjectNames.FullName;
 
         public string FullPath
         {
@@ -55,24 +45,16 @@ namespace NuGet.PackageManagement.VisualStudio
                 }
                 else
                 {
-                    return _fullProjectPath;
+                    return Path.GetDirectoryName(FullProjectPath);
                 }
             }
         }
 
-        public string FullProjectPath
-        {
-            get
-            {
-                if (string.IsNullOrEmpty(_fullProjectPath))
-                {
-                    _fullProjectPath = EnvDTEProjectInfoUtility.GetFullProjectPath(_dteProject);
-                }
-                return _fullProjectPath;
-            }
-        }
+        public string FullProjectPath { get; private set; }
 
-        bool IVsProjectAdapter.IsSupported
+        public bool IsLoadDeferred => _dteProject == null;
+
+        public bool IsSupported
         {
             get
             {
@@ -85,54 +67,25 @@ namespace NuGet.PackageManagement.VisualStudio
             }
         }
 
-        public IVsHierarchy IVsHierarchy
+        public IVsProjectBuildSystem ProjectBuildSystem => EnvDTEProjectUtility.GetVsProjectBuildSystem(DteProject);
+
+        public string ProjectId
         {
             get
             {
-                if (_dteProject != null)
+                Guid id;
+                if (!_vsHierarchyItem.TryGetProjectId(out id))
                 {
-                    return VsHierarchyUtility.ToVsHierarchy(_dteProject);
+                    id = Guid.Empty;
                 }
-                else
-                {
-                    return null;
-                }
+
+                return id.ToString();
             }
         }
 
-        public IVsProjectBuildSystem ProjectBuildSystem => EnvDTEProjectUtility.GetVsProjectBuildSystem(_dteProject);
+        public string ProjectName => ProjectNames.ShortName;
 
-        public string ProjectId => VsHierarchyUtility.GetProjectId(_dteProject);
-
-        public string ProjectName
-        {
-            get
-            {
-                if (_dteProject != null)
-                {
-                    return EnvDTEProjectInfoUtility.GetName(_dteProject);
-                }
-                else
-                {
-                    return Path.GetFileNameWithoutExtension(_fullProjectPath);
-                }
-            }
-        }
-
-        public ProjectNames ProjectNames
-        {
-            get
-            {
-                if (_dteProject != null)
-                {
-                    return ProjectNames.FromDTEProject(_dteProject);
-                }
-                else
-                {
-                    return ProjectNames.FromFullProjectPath(_fullProjectPath);
-                }
-            }
-        }
+        public ProjectNames ProjectNames { get; private set; }
 
         public string[] ProjectTypeGuids
         {
@@ -144,29 +97,29 @@ namespace NuGet.PackageManagement.VisualStudio
                 }
                 else
                 {
-                    return new string[] { };
+                    return VsHierarchyUtility.GetProjectTypeGuids(VsHierarchy);
                 }
             }
         }
 
-        public string UniqueName
+        public string UniqueName => ProjectNames.UniqueName;
+
+        public EnvDTE.Project DteProject
         {
             get
             {
-                if (_dteProject != null)
+                if (_dteProject == null)
                 {
-                    return EnvDTEProjectInfoUtility.GetUniqueName(_dteProject);
+                    _dteProject = _loadDteProject(_vsHierarchyItem.VsHierarchy);
                 }
-                else
-                {
-                    return _fullProjectPath;
-                }
+
+                return _dteProject;
             }
         }
 
-        public EnvDTE.Project DteProject => _dteProject;
+        public IVsHierarchy VsHierarchy => _vsHierarchyItem.VsHierarchy;
 
-        public bool SupportsReference => EnvDTEProjectUtility.SupportsReferences(_dteProject);
+        #endregion Properties
 
         public VsProjectAdapter(
             EnvDTE.Project dteProject,
@@ -175,72 +128,41 @@ namespace NuGet.PackageManagement.VisualStudio
             Assumes.Present(dteProject);
             Assumes.Present(vsProjectAdapterProvider);
 
+            _vsHierarchyItem = VsHierarchyItem.FromDteProject(dteProject);
             _dteProject = dteProject;
             _vsProjectAdapterProvider = vsProjectAdapterProvider;
+
+            FullProjectPath = EnvDTEProjectInfoUtility.GetFullProjectPath(_dteProject);
+            ProjectNames = ProjectNames.FromDTEProject(_dteProject);
         }
 
         public VsProjectAdapter(
-            string projectPath, 
-            Func<EnvDTE.Project> loadDTEProject,
+            IVsHierarchy project,
+            ProjectNames projectNames,
+            Func<IVsHierarchy, EnvDTE.Project> loadDteProject,
             IVsProjectAdapterProvider vsProjectAdapterProvider,
             IDeferredProjectWorkspaceService deferredProjectWorkspaceService)
         {
-            Assumes.NotNullOrEmpty(projectPath);
-            Assumes.Present(loadDTEProject);
+            Assumes.Present(project);
+            Assumes.Present(projectNames);
+            Assumes.Present(loadDteProject);
             Assumes.Present(vsProjectAdapterProvider);
             Assumes.Present(deferredProjectWorkspaceService);
 
-            _fullProjectPath = projectPath;
-            _loadDTEProject = loadDTEProject;
+            _vsHierarchyItem = VsHierarchyItem.FromVsHierarchy(project);
+            _loadDteProject = loadDteProject;
             _vsProjectAdapterProvider = vsProjectAdapterProvider;
             _deferredProjectWorkspaceService = deferredProjectWorkspaceService;
+
+            FullProjectPath = VsHierarchyUtility.GetProjectPath(project);
+            ProjectNames = projectNames;
         }
 
-        public IList<IVsProjectAdapter> GetReferencedProjects()
-        {
-            return EnvDTEProjectUtility.GetReferencedProjects(_dteProject).Select(project => _vsProjectAdapterProvider.CreateVsProject(project)).ToList();
-        }
+        #region Getters
 
-        public NuGetFramework GetTargetNuGetFramework()
+        public HashSet<string> GetAssemblyClosure(IDictionary<string, HashSet<string>> visitedProjects)
         {
-            return EnvDTEProjectInfoUtility.GetTargetNuGetFramework(_dteProject);
-        }
-
-        public void EnsureCheckedOutIfExists(string root, string path)
-        {
-            EnvDTEProjectUtility.EnsureCheckedOutIfExists(_dteProject, root, path);
-        }
-
-        public async Task<EnvDTE.ProjectItems> GetProjectItemsAsync(string folderPath, bool createIfNotExists)
-        {
-            return await EnvDTEProjectUtility.GetProjectItemsAsync(_dteProject, folderPath, createIfNotExists);
-        }
-
-        public FrameworkName GetDotNetFrameworkName()
-        {
-            return EnvDTEProjectInfoUtility.GetDotNetFrameworkName(_dteProject);
-        }
-
-        public async Task<bool> ContainsFile(string path)
-        {
-            return await EnvDTEProjectUtility.ContainsFile(_dteProject, path);
-        }
-
-        public dynamic GetPropertyValue(string propertyName)
-        {
-            try
-            {
-                var envDTEProperty = _dteProject.Properties.Item(propertyName);
-                if (envDTEProperty != null)
-                {
-                    return envDTEProperty.Value;
-                }
-            }
-            catch (ArgumentException)
-            {
-                // If the property doesn't exist this will throw an argument exception
-            }
-            return null;
+            return EnvDTEProjectUtility.GetAssemblyClosure(DteProject, visitedProjects);
         }
 
         public IEnumerable<string> GetChildItems(string path, string filter, string desiredKind)
@@ -249,11 +171,41 @@ namespace NuGet.PackageManagement.VisualStudio
             {
                 await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                var childItems = await EnvDTEProjectUtility.GetChildItems(_dteProject, path, filter, VsProjectTypes.VsProjectItemKindPhysicalFile);
+                var childItems = await EnvDTEProjectUtility.GetChildItems(DteProject, path, filter, VsProjectTypes.VsProjectItemKindPhysicalFile);
                 // Get all physical files
                 return from p in childItems
                        select p.Name;
             });
+        }
+
+        public string GetConfigurationFile()
+        {
+            return EnvDTEProjectInfoUtility.GetConfigurationFile(DteProject);
+        }
+
+        public async Task<IReadOnlyList<ProjectRestoreReference>> GetDirectProjectReferencesAsync(IEnumerable<string> resolvedProjects, ILogger logger)
+        {
+            if (_deferredProjectWorkspaceService != null)
+            {
+                var references = await _deferredProjectWorkspaceService.GetProjectReferencesAsync(FullProjectPath);
+
+                return references
+                    .Select(reference => new ProjectRestoreReference
+                    {
+                        ProjectPath = reference,
+                        ProjectUniqueName = reference
+                    })
+                    .ToList();
+            }
+            else
+            {
+                return await VSProjectRestoreReferenceUtility.GetDirectProjectReferencesAsync(DteProject, resolvedProjects, logger);
+            }
+        }
+
+        public FrameworkName GetDotNetFrameworkName()
+        {
+            return EnvDTEProjectInfoUtility.GetDotNetFrameworkName(DteProject);
         }
 
         public IEnumerable<string> GetFullPaths(string fileName)
@@ -264,7 +216,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
                 var paths = new List<string>();
                 var projectItemsQueue = new Queue<EnvDTE.ProjectItems>();
-                projectItemsQueue.Enqueue(_dteProject.ProjectItems);
+                projectItemsQueue.Enqueue(DteProject.ProjectItems);
                 while (projectItemsQueue.Count > 0)
                 {
                     var items = projectItemsQueue.Dequeue();
@@ -288,74 +240,99 @@ namespace NuGet.PackageManagement.VisualStudio
             });
         }
 
-        public bool SupportsBindingRedirects()
+        public async Task<EnvDTE.ProjectItems> GetProjectItemsAsync(string folderPath, bool createIfNotExists)
         {
-            return EnvDTEProjectUtility.SupportsBindingRedirects(_dteProject);
+            return await EnvDTEProjectUtility.GetProjectItemsAsync(DteProject, folderPath, createIfNotExists);
         }
 
-        public HashSet<string> GetAssemblyClosure(IDictionary<string, HashSet<string>> visitedProjects)
+        public dynamic GetPropertyValue(string propertyName)
         {
-            return EnvDTEProjectUtility.GetAssemblyClosure(_dteProject, visitedProjects);
-        }
-
-        public string GetConfigurationFile()
-        {
-            return EnvDTEProjectInfoUtility.GetConfigurationFile(_dteProject);
-        }
-
-        public async Task<IReadOnlyList<ProjectRestoreReference>> GetDirectProjectReferencesAsync(IEnumerable<string> resolvedProjects, ILogger logger)
-        {
-            if (_deferredProjectWorkspaceService != null)
+            try
             {
-                var references = await _deferredProjectWorkspaceService.GetProjectReferencesAsync(_fullProjectPath);
-
-                return references
-                    .Select(reference => new ProjectRestoreReference
-                    {
-                        ProjectPath = reference,
-                        ProjectUniqueName = reference
-                    })
-                    .ToList();
+                var envDTEProperty = DteProject.Properties.Item(propertyName);
+                if (envDTEProperty != null)
+                {
+                    return envDTEProperty.Value;
+                }
             }
-            else
+            catch (ArgumentException)
             {
-                return await VSProjectRestoreReferenceUtility.GetDirectProjectReferencesAsync(_dteProject, resolvedProjects, logger);
+                // If the property doesn't exist this will throw an argument exception
             }
+            return null;
         }
 
         public async Task<EnvDTE.ProjectItem> GetProjectItemAsync(string path)
         {
-            return await EnvDTEProjectUtility.GetProjectItemAsync(_dteProject, path);
+            return await EnvDTEProjectUtility.GetProjectItemAsync(DteProject, path);
+        }
+
+        public IList<IVsProjectAdapter> GetReferencedProjects()
+        {
+            return EnvDTEProjectUtility.GetReferencedProjects(DteProject).Select(project => _vsProjectAdapterProvider.CreateVsProject(project)).ToList();
+        }
+
+        public NuGetFramework GetTargetNuGetFramework()
+        {
+            return EnvDTEProjectInfoUtility.GetTargetNuGetFramework(DteProject);
         }
 
         public UnconfiguredProject GetUnconfiguredProject()
         {
-            var context = _dteProject as IVsBrowseObjectContext;
-            if (context == null && _dteProject != null)
-            { // VC implements this on their DTE.Project.Object
-                context = _dteProject.Object as IVsBrowseObjectContext;
+            var context = DteProject as IVsBrowseObjectContext;
+            if (context == null)
+            { 
+                // VC implements this on their DTE.Project.Object
+                context = DteProject.Object as IVsBrowseObjectContext;
             }
-            return context != null ? context.UnconfiguredProject : null;
+            return context?.UnconfiguredProject;
         }
+
+        #endregion Getters
+
+        #region Queries
+
+        public async Task<bool> ContainsFile(string path)
+        {
+            return await EnvDTEProjectUtility.ContainsFile(DteProject, path);
+        }
+
+        public bool SupportsBindingRedirects()
+        {
+            return EnvDTEProjectUtility.SupportsBindingRedirects(DteProject);
+        }
+
+        public bool SupportsReference => EnvDTEProjectUtility.SupportsReferences(DteProject);
+
+        #endregion Queries
+
+        #region Methods
 
         public void AddImportStatement(string targetsPath, ImportLocation location)
         {
-            EnvDTEProjectUtility.AddImportStatement(_dteProject, targetsPath, location);
+            EnvDTEProjectUtility.AddImportStatement(DteProject, targetsPath, location);
         }
 
         public async Task<bool> DeleteProjectItemAsync(string path)
         {
-            return await EnvDTEProjectUtility.DeleteProjectItemAsync(_dteProject, path);
+            return await EnvDTEProjectUtility.DeleteProjectItemAsync(DteProject, path);
+        }
+
+        public void EnsureCheckedOutIfExists(string root, string path)
+        {
+            EnvDTEProjectUtility.EnsureCheckedOutIfExists(DteProject, root, path);
         }
 
         public void RemoveImportStatement(string targetsPath)
         {
-            EnvDTEProjectUtility.RemoveImportStatement(_dteProject, targetsPath);
+            EnvDTEProjectUtility.RemoveImportStatement(DteProject, targetsPath);
         }
 
         public void Save()
         {
-            EnvDTEProjectUtility.Save(_dteProject);
+            EnvDTEProjectUtility.Save(DteProject);
         }
+        
+        #endregion Methods
     }
 }
