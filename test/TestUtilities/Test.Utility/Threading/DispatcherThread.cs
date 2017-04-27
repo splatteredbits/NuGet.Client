@@ -17,7 +17,6 @@ namespace Test.Utility.Threading
         private SynchronizationContext _syncContext;
         private Exception _invokeException;
         private bool _isInvoking;
-        private bool _isClosed;
 
         public DispatcherThread()
         {
@@ -86,13 +85,19 @@ namespace Test.Utility.Threading
                     _invokeException = e.Exception;
                 }
 
+
+                if (_invokeException != null)
+                {
+                    throw _invokeException;
+                }
+
                 e.Handled = true;
             }
         }
 
         public void Invoke(Action action)
         {
-            if (_isClosed)
+            if (_dispatcher == null || _dispatcher.HasShutdownFinished)
             {
                 throw new ObjectDisposedException(GetType().Name);
             }
@@ -120,7 +125,7 @@ namespace Test.Utility.Threading
 
         public DispatcherOperation BeginInvoke(Action action)
         {
-            if (_isClosed)
+            if (_dispatcher == null || _dispatcher.HasShutdownFinished)
             {
                 throw new ObjectDisposedException(GetType().Name);
             }
@@ -128,22 +133,20 @@ namespace Test.Utility.Threading
             return _dispatcher.BeginInvoke(DispatcherPriority.Normal, action);
         }
 
-        [SecurityPermission(SecurityAction.Demand, ControlThread = true)]
         public void Close()
         {
-            if (!_isClosed)
+            if (_dispatcher != null && !_dispatcher.HasShutdownFinished)
             {
-                _dispatcher?.InvokeShutdown();
-                _dispatcher = null;
-
                 try
                 {
                     _thread.Abort();
                 }
                 finally
                 {
-                    _isClosed = true;
+                    _dispatcher?.InvokeShutdown();
+                    _dispatcher = null;
                 }
+
             }
  
         }

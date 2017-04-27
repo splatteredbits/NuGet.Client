@@ -49,6 +49,7 @@ namespace NuGet.PackageManagement.VisualStudio.Test
 
         public void Dispose()
         {
+            Assert.False(_lockService.IsLockHeld);
             _lockService.Dispose();
             _cts.Dispose();
         }
