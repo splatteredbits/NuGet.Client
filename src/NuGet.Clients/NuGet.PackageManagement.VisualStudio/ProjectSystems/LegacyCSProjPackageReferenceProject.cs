@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Threading;
 using NuGet.Commands;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
@@ -28,7 +29,7 @@ namespace NuGet.PackageManagement.VisualStudio
     /// An implementation of <see cref="NuGetProject"/> that interfaces with VS project APIs to coordinate
     /// packages in a legacy CSProj with package references.
     /// </summary>
-    public class LegacyCSProjPackageReferenceProject : BuildIntegratedNuGetProject
+    public sealed class LegacyCSProjPackageReferenceProject : BuildIntegratedNuGetProject
     {
         private const string IncludeAssets = "IncludeAssets";
         private const string ExcludeAssets = "ExcludeAssets";
@@ -39,11 +40,11 @@ namespace NuGet.PackageManagement.VisualStudio
         private readonly IVsProjectAdapter _project;
         private readonly Lazy<VSProject4> _asVSProject4;
 
+        private JoinableTaskFactory _jtf;
         private IScriptExecutor _scriptExecutor;
         private string _projectName;
         private string _projectUniqueName;
         private string _projectFullPath;
-        private bool _callerIsUnitTest;
 
         static LegacyCSProjPackageReferenceProject()
         {
@@ -55,10 +56,10 @@ namespace NuGet.PackageManagement.VisualStudio
 
         public LegacyCSProjPackageReferenceProject(
             IVsProjectAdapter project,
-            string projectId,
-            bool callerIsUnitTest = false)
+            string projectId)
         {
             Assumes.Present(project);
+            Assumes.NotNullOrEmpty(projectId);
 
             _project = project;
             _asVSProject4 = new Lazy<VSProject4>(() => _project.Project.Object as VSProject4);
@@ -66,7 +67,6 @@ namespace NuGet.PackageManagement.VisualStudio
             _projectName = _project.ProjectName;
             _projectUniqueName = _project.UniqueName;
             _projectFullPath = _project.FullPath;
-            _callerIsUnitTest = callerIsUnitTest;
 
             InternalMetadata.Add(NuGetProjectMetadataKeys.Name, _projectName);
             InternalMetadata.Add(NuGetProjectMetadataKeys.UniqueName, _projectUniqueName);
@@ -77,6 +77,19 @@ namespace NuGet.PackageManagement.VisualStudio
         public override string ProjectName => _projectName;
 
         private VSProject4 AsVSProject4 => _asVSProject4.Value;
+
+        public JoinableTaskFactory JoinableTaskFactory
+        {
+            private get
+            {
+                return _jtf ?? NuGetUIThreadHelper.JoinableTaskFactory;
+            }
+            set
+            {
+                Assumes.Present(value);
+                _jtf = value;
+            }
+        }
 
         private IScriptExecutor ScriptExecutor
         {
@@ -103,7 +116,9 @@ namespace NuGet.PackageManagement.VisualStudio
 
         private async Task<string> GetAssetsFilePathAsync(bool shouldThrow)
         {
-            var baseIntermediatePath = await GetBaseIntermediatePathAsync(shouldThrow);
+            await JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            var baseIntermediatePath = GetBaseIntermediatePath(shouldThrow);
 
             if (baseIntermediatePath == null)
             {
@@ -174,23 +189,16 @@ namespace NuGet.PackageManagement.VisualStudio
             IEnumerable<string> metadataElements,
             IEnumerable<string> metadataValues)
         {
-            var success = false;
+            await JoinableTaskFactory.SwitchToMainThreadAsync();
 
-            await NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(async delegate
-            {
-                await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            // We don't adjust package reference metadata from UI
+            AddOrUpdateLegacyCSProjPackage(
+                packageId,
+                range.OriginalString ?? range.ToShortString(),
+                metadataElements?.ToArray() ?? new string[0],
+                metadataValues?.ToArray() ?? new string[0]);
 
-                // We don't adjust package reference metadata from UI
-                AddOrUpdateLegacyCSProjPackage(
-                    packageId,
-                    range.OriginalString ?? range.ToShortString(),
-                    metadataElements?.ToArray() ?? new string[0],
-                    metadataValues?.ToArray() ?? new string[0]);
-
-                success = true;
-            });
-
-            return success;
+            return true;
         }
 
         /// <summary>
@@ -213,17 +221,11 @@ namespace NuGet.PackageManagement.VisualStudio
 
         public override async Task<bool> UninstallPackageAsync(PackageIdentity packageIdentity, INuGetProjectContext nuGetProjectContext, CancellationToken token)
         {
-            var success = false;
-            await NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(async delegate
-            {
-                await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            await JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                RemoveLegacyCSProjPackage(packageIdentity.Id);
+            RemoveLegacyCSProjPackage(packageIdentity.Id);
 
-                success = true;
-            });
-
-            return success;
+            return true;
         }
 
         /// <summary>
@@ -239,14 +241,9 @@ namespace NuGet.PackageManagement.VisualStudio
 
         #endregion
 
-        private async Task<string> GetBaseIntermediatePathAsync(bool shouldThrow)
-        {
-            return await RunOnUIThread(() => GetBaseIntermediatePath(shouldThrow));
-        }
-
         private string GetBaseIntermediatePath(bool shouldThrow = true)
         {
-            EnsureUIThread();
+            ThreadHelper.ThrowIfNotOnUIThread();
 
             var baseIntermediatePath = _project.BaseIntermediateOutputPath;
 
@@ -309,17 +306,12 @@ namespace NuGet.PackageManagement.VisualStudio
             return new PackageReference(identity, targetFramework);
         }
 
-        private async Task<PackageSpec> GetPackageSpecAsync()
-        {
-            return await RunOnUIThread(GetPackageSpec);
-        }
-
         /// <summary>
         /// Emulates a JSON deserialization from project.json to PackageSpec in a post-project.json world
         /// </summary>
-        private PackageSpec GetPackageSpec()
+        private async Task<PackageSpec> GetPackageSpecAsync()
         {
-            EnsureUIThread();
+            await JoinableTaskFactory.SwitchToMainThreadAsync();
 
             var projectReferences = GetLegacyCSProjProjectReferences(_desiredPackageReferenceMetadata)
                 .Select(ToProjectRestoreReference);
@@ -333,7 +325,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
             var projectTfi = new TargetFrameworkInformation()
             {
-                FrameworkName = _project.TargetNuGetFramework,
+                FrameworkName = _project.GetTargetFramework(),
                 Dependencies = packageReferences,
                 Imports = packageTargetFallback ?? new List<NuGetFramework>()
             };
@@ -344,7 +336,7 @@ namespace NuGet.PackageManagement.VisualStudio
             }
 
             // Build up runtime information.
-            var runtimes = _project.Runtimes;
+            var runtimes = _project.GetRuntimes();
             var supports = _project.Supports;
             var runtimeGraph = new RuntimeGraph(runtimes, supports);
 
@@ -392,7 +384,12 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            foreach (var reference in AsVSProject4.References.Cast<Reference6>().Where(r => r.SourceProject != null))
+            if (_project.References == null)
+            {
+                yield break;
+            }
+
+            foreach (var reference in _project.References.Cast<Reference6>().Where(r => r.SourceProject != null))
             {
                 Array metadataElements;
                 Array metadataValues;
@@ -414,8 +411,12 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            var installedPackages = AsVSProject4.PackageReferences.InstalledPackages;
-            var packageReferences = new List<LegacyCSProjPackageReference>();
+            var installedPackages = AsVSProject4.PackageReferences?.InstalledPackages;
+
+            if (installedPackages == null)
+            {
+                yield break;
+            }
 
             foreach (var installedPackage in installedPackages)
             {
@@ -432,7 +433,7 @@ namespace NuGet.PackageManagement.VisualStudio
                         version: version,
                         metadataElements: metadataElements,
                         metadataValues: metadataValues,
-                        targetNuGetFramework: _project.TargetNuGetFramework);
+                        targetNuGetFramework: _project.GetTargetFramework());
                 }
             }
         }
@@ -523,32 +524,6 @@ namespace NuGet.PackageManagement.VisualStudio
             }
 
             return string.Empty;
-        }
-
-        private async Task<T> RunOnUIThread<T>(Func<T> uiThreadFunction)
-        {
-            if (_callerIsUnitTest)
-            {
-                return uiThreadFunction();
-            }
-
-            var result = default(T);
-            await NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(async delegate
-            {
-                await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-                result = uiThreadFunction();
-            });
-
-            return result;
-        }
-
-        private void EnsureUIThread()
-        {
-            if (!_callerIsUnitTest)
-            {
-                ThreadHelper.ThrowIfNotOnUIThread();
-            }
         }
     }
 }

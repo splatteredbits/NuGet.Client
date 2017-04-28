@@ -13,25 +13,35 @@ using Microsoft.VisualStudio.ProjectSystem;
 using Microsoft.VisualStudio.ProjectSystem.Properties;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Threading;
+using Microsoft.VisualStudio.Workspace.Extensions.MSBuild;
 using NuGet.Commands;
-using NuGet.Common;
 using NuGet.Frameworks;
 using NuGet.ProjectManagement;
 using NuGet.ProjectModel;
 using NuGet.RuntimeModel;
 using NuGet.VisualStudio;
 using VSLangProj;
+using VSLangProj150;
 
 namespace NuGet.PackageManagement.VisualStudio
 {
     [DebuggerDisplay("{ProjectName}")]
     internal class VsProjectAdapter : IVsProjectAdapter
     {
+        #region Private members
+
         private readonly VsHierarchyItem _vsHierarchyItem;
         private EnvDTE.Project _dteProject;
         private readonly Func<IVsHierarchy, EnvDTE.Project> _loadDteProject;
         private readonly IVsProjectAdapterProvider _vsProjectAdapterProvider;
         private readonly IDeferredProjectWorkspaceService _deferredProjectWorkspaceService;
+        private readonly AsyncLazy<IMSBuildProjectDataService> _buildProjectDataService;
+        private readonly Lazy<VSProject4> _asVSProject4;
+
+        private VSProject4 AsVSProject4 => _asVSProject4.Value;
+
+        #endregion Private members
 
         #region Properties
 
@@ -39,8 +49,6 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             get
             {
-                ThreadHelper.ThrowIfNotOnUIThread();
-
                 var baseIntermediateOutputPath = GetBuildProperty("BaseIntermediateOutputPath");
 
                 if (string.IsNullOrEmpty(baseIntermediateOutputPath))
@@ -64,7 +72,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             get
             {
-                if (_dteProject != null)
+                if (!IsLoadDeferred)
                 {
                     return EnvDTEProjectInfoUtility.GetFullPath(_dteProject);
                 }
@@ -83,7 +91,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             get
             {
-                if (_dteProject != null)
+                if (!IsLoadDeferred)
                 {
                     return EnvDTEProjectUtility.IsSupported(_dteProject);
                 }
@@ -96,9 +104,20 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             get
             {
-                ThreadHelper.ThrowIfNotOnUIThread();
-
                 return GetBuildProperty("PackageTargetFallback");
+            }
+        }
+
+        public EnvDTE.Project Project
+        {
+            get
+            {
+                if (_dteProject == null)
+                {
+                    _dteProject = _loadDteProject(_vsHierarchyItem.VsHierarchy);
+                }
+
+                return _dteProject;
             }
         }
 
@@ -126,7 +145,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             get
             {
-                if (_dteProject != null)
+                if (!IsLoadDeferred)
                 {
                     return VsHierarchyUtility.GetProjectTypeGuids(_dteProject);
                 }
@@ -137,33 +156,21 @@ namespace NuGet.PackageManagement.VisualStudio
             }
         }
 
-        public IEnumerable<RuntimeDescription> Runtimes
+        public References References
         {
             get
             {
                 ThreadHelper.ThrowIfNotOnUIThread();
 
-                var unparsedRuntimeIdentifer = GetBuildProperty("RuntimeIdentifier");
-                var unparsedRuntimeIdentifers = GetBuildProperty("RuntimeIdentifiers");
-
-                var runtimes = Enumerable.Empty<string>();
-
-                if (unparsedRuntimeIdentifer != null)
+                if (AsVSProject4 != null)
                 {
-                    runtimes = runtimes.Concat(new[] { unparsedRuntimeIdentifer });
+                    return AsVSProject4.References;
                 }
 
-                if (unparsedRuntimeIdentifers != null)
-                {
-                    runtimes = runtimes.Concat(unparsedRuntimeIdentifers.Split(';'));
-                }
-
-                runtimes = runtimes
-                    .Select(x => x.Trim())
-                    .Where(x => !string.IsNullOrEmpty(x));
-
-                return runtimes
-                    .Select(runtime => new RuntimeDescription(runtime));
+                dynamic projectObj = Project.Object;
+                var references = (References)projectObj.References;
+                projectObj = null;
+                return references;
             }
         }
 
@@ -185,43 +192,6 @@ namespace NuGet.PackageManagement.VisualStudio
                     .Select(x => x.Trim())
                     .Where(x => !string.IsNullOrEmpty(x))
                     .Select(support => new CompatibilityProfile(support));
-            }
-        }
-
-        public NuGetFramework TargetNuGetFramework
-        {
-            get
-            {
-                ThreadHelper.ThrowIfNotOnUIThread();
-
-                var nugetFramework = NuGetFramework.UnsupportedFramework;
-                var projectPath = FullPath;
-                var platformIdentifier = GetBuildProperty("TargetPlatformIdentifier");
-                var platformVersion = GetBuildProperty("TargetPlatformVersion");
-                var platformMinVersion = GetBuildProperty("TargetPlatformMinVersion");
-                var targetFrameworkMoniker = GetBuildProperty("TargetFrameworkMoniker");
-
-                // Projects supporting TargetFramework and TargetFrameworks are detected before
-                // this check. The values can be passed as null here.
-                var frameworkStrings = MSBuildProjectFrameworkUtility.GetProjectFrameworkStrings(
-                    projectFilePath: projectPath,
-                    targetFrameworks: null,
-                    targetFramework: null,
-                    targetFrameworkMoniker: targetFrameworkMoniker,
-                    targetPlatformIdentifier: platformIdentifier,
-                    targetPlatformVersion: platformVersion,
-                    targetPlatformMinVersion: platformMinVersion,
-                    isManagementPackProject: false,
-                    isXnaWindowsPhoneProject: false);
-
-                var frameworkString = frameworkStrings.FirstOrDefault();
-
-                if (!string.IsNullOrEmpty(frameworkString))
-                {
-                    nugetFramework = NuGetFramework.Parse(frameworkString);
-                }
-
-                return nugetFramework;
             }
         }
 
@@ -249,26 +219,16 @@ namespace NuGet.PackageManagement.VisualStudio
             }
         }
 
-        public EnvDTE.Project Project
-        {
-            get
-            {
-                if (_dteProject == null)
-                {
-                    _dteProject = _loadDteProject(_vsHierarchyItem.VsHierarchy);
-                }
-
-                return _dteProject;
-            }
-        }
-
         public IVsHierarchy VsHierarchy => _vsHierarchyItem.VsHierarchy;
 
         #endregion Properties
 
+        #region Constructors
+
         public VsProjectAdapter(
             EnvDTE.Project dteProject,
             IVsProjectAdapterProvider vsProjectAdapterProvider)
+            : this()
         {
             Assumes.Present(dteProject);
             Assumes.Present(vsProjectAdapterProvider);
@@ -287,6 +247,7 @@ namespace NuGet.PackageManagement.VisualStudio
             Func<IVsHierarchy, EnvDTE.Project> loadDteProject,
             IVsProjectAdapterProvider vsProjectAdapterProvider,
             IDeferredProjectWorkspaceService deferredProjectWorkspaceService)
+            : this()
         {
             Assumes.Present(project);
             Assumes.Present(projectNames);
@@ -301,13 +262,29 @@ namespace NuGet.PackageManagement.VisualStudio
 
             FullProjectPath = VsHierarchyUtility.GetProjectPath(project);
             ProjectNames = projectNames;
+
+            _buildProjectDataService = new AsyncLazy<IMSBuildProjectDataService>(
+                () => _deferredProjectWorkspaceService.GetMSBuildProjectDataServiceAsync(FullProjectPath),
+                NuGetUIThreadHelper.JoinableTaskFactory);
         }
+
+        private VsProjectAdapter()
+        {
+            _asVSProject4 = new Lazy<VSProject4>(() => Project.Object as VSProject4);
+        }
+
+        #endregion Constructors
 
         #region Getters
 
         public HashSet<string> GetAssemblyClosure(IDictionary<string, HashSet<string>> visitedProjects)
         {
             return EnvDTEProjectUtility.GetAssemblyClosure(Project, visitedProjects);
+        }
+
+        public string GetBuildProperty(string propertyName)
+        {
+            return VsHierarchyUtility.GetBuildProperty(AsVsBuildPropertyStorage, propertyName);
         }
 
         public IEnumerable<string> GetChildItems(string path, string filter, string desiredKind)
@@ -328,7 +305,7 @@ namespace NuGet.PackageManagement.VisualStudio
             return EnvDTEProjectInfoUtility.GetConfigurationFile(Project);
         }
 
-        public async Task<IReadOnlyList<ProjectRestoreReference>> GetDirectProjectReferencesAsync(IEnumerable<string> resolvedProjects, ILogger logger)
+        public async Task<IReadOnlyList<ProjectRestoreReference>> GetDirectProjectReferencesAsync(IEnumerable<string> resolvedProjects, Common.ILogger logger)
         {
             if (_deferredProjectWorkspaceService != null)
             {
@@ -385,11 +362,6 @@ namespace NuGet.PackageManagement.VisualStudio
             });
         }
 
-        public string GetBuildProperty(string propertyName)
-        {
-            return VsHierarchyUtility.GetBuildProperty(AsVsBuildPropertyStorage, propertyName);
-        }
-
         public async Task<EnvDTE.ProjectItems> GetProjectItemsAsync(string folderPath, bool createIfNotExists)
         {
             return await EnvDTEProjectUtility.GetProjectItemsAsync(Project, folderPath, createIfNotExists);
@@ -422,14 +394,81 @@ namespace NuGet.PackageManagement.VisualStudio
             return EnvDTEProjectUtility.GetReferencedProjects(Project).Select(project => _vsProjectAdapterProvider.CreateVsProject(project)).ToList();
         }
 
-        public References GetReferences()
+        public IEnumerable<RuntimeDescription> GetRuntimes()
         {
-            return EnvDTEProjectUtility.GetReferences(Project);
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            var unparsedRuntimeIdentifer = GetBuildProperty("RuntimeIdentifier");
+            var unparsedRuntimeIdentifers = GetBuildProperty("RuntimeIdentifiers");
+
+            var runtimes = Enumerable.Empty<string>();
+
+            if (unparsedRuntimeIdentifer != null)
+            {
+                runtimes = runtimes.Concat(new[] { unparsedRuntimeIdentifer });
+            }
+
+            if (unparsedRuntimeIdentifers != null)
+            {
+                runtimes = runtimes.Concat(unparsedRuntimeIdentifers.Split(';'));
+            }
+
+            runtimes = runtimes
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrEmpty(x));
+
+            return runtimes
+                .Select(runtime => new RuntimeDescription(runtime));
         }
 
-        public NuGetFramework GetTargetNuGetFramework()
+        public NuGetFramework GetTargetFramework()
         {
-            return EnvDTEProjectInfoUtility.GetTargetNuGetFramework(Project);
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            var nugetFramework = NuGetFramework.UnsupportedFramework;
+            var projectPath = FullPath;
+            var platformIdentifier = GetBuildProperty("TargetPlatformIdentifier");
+            var platformVersion = GetBuildProperty("TargetPlatformVersion");
+            var platformMinVersion = GetBuildProperty("TargetPlatformMinVersion");
+            var targetFrameworkMoniker = GetBuildProperty("TargetFrameworkMoniker");
+
+            // Projects supporting TargetFramework and TargetFrameworks are detected before
+            // this check. The values can be passed as null here.
+            var frameworkStrings = MSBuildProjectFrameworkUtility.GetProjectFrameworkStrings(
+                projectFilePath: projectPath,
+                targetFrameworks: null,
+                targetFramework: null,
+                targetFrameworkMoniker: targetFrameworkMoniker,
+                targetPlatformIdentifier: platformIdentifier,
+                targetPlatformVersion: platformVersion,
+                targetPlatformMinVersion: platformMinVersion,
+                isManagementPackProject: false,
+                isXnaWindowsPhoneProject: false);
+
+            var frameworkString = frameworkStrings.FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(frameworkString))
+            {
+                nugetFramework = NuGetFramework.Parse(frameworkString);
+            }
+
+            return nugetFramework;
+        }
+
+        public async Task<NuGetFramework> GetTargetFrameworkAsync()
+        {
+            if (!IsLoadDeferred)
+            {
+                return EnvDTEProjectInfoUtility.GetTargetNuGetFramework(Project);
+            }
+            else
+            {
+                var msbuildProjectDataService = await _buildProjectDataService.GetValueAsync();
+
+                var nuGetFramework = await SolutionWorkspaceUtility.GetNuGetFrameworkAsync(msbuildProjectDataService, FullProjectPath);
+
+                return nuGetFramework;
+            }
         }
 
         public UnconfiguredProject GetUnconfiguredProject()

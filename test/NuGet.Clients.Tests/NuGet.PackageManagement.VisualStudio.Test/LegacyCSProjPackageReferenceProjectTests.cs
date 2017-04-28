@@ -5,7 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Microsoft;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Threading;
 using Moq;
 using NuGet.Frameworks;
 using NuGet.ProjectManagement;
@@ -13,30 +15,47 @@ using NuGet.RuntimeModel;
 using NuGet.Test.Utility;
 using NuGet.Versioning;
 using NuGet.VisualStudio;
+using Test.Utility.Threading;
+using VSLangProj;
+using VSLangProj150;
 using Xunit;
 using Task = System.Threading.Tasks.Task;
 
 namespace NuGet.PackageManagement.VisualStudio.Test
 {
+    [Collection(DispatcherThreadCollection.CollectionName)]
     public class LegacyCSProjPackageReferenceProjectTests
     {
+        private readonly JoinableTaskFactory _jtf;
+
+        public LegacyCSProjPackageReferenceProjectTests(DispatcherThreadFixture fixture)
+        {
+            Assumes.Present(fixture);
+
+            _jtf = fixture.JoinableTaskFactory;
+        }
+
         [Fact]
-        public async Task LCPRP_AssetsFileLocation()
+        public async Task GetAssetsFilePathAsync_WithValidBaseIntermediateOutputPath_Succeeds()
         {
             // Arrange
-            using (var randomTestFolder = TestDirectory.Create())
+            using (var testDirectory = TestDirectory.Create())
             {
-                var testBaseIntermediateOutputPath = Path.Combine(randomTestFolder, "obj");
+                var testBaseIntermediateOutputPath = Path.Combine(testDirectory, "obj");
                 TestDirectory.Create(testBaseIntermediateOutputPath);
-                var testEnvDTEProjectAdapter = new Mock<IVsProjectAdapter>();
-                testEnvDTEProjectAdapter
-                    .Setup(x => x.BaseIntermediateOutputPath)
+                var projectAdapter = Mock.Of<IVsProjectAdapter>();
+                Mock.Get(projectAdapter)
+                    .SetupGet(x => x.BaseIntermediateOutputPath)
                     .Returns(testBaseIntermediateOutputPath);
 
                 var testProject = new LegacyCSProjPackageReferenceProject(
-                    project: testEnvDTEProjectAdapter.Object, 
-                    projectId: String.Empty, 
-                    callerIsUnitTest: true);
+                    project: projectAdapter,
+                    projectId: Guid.NewGuid().ToString())
+                {
+                    JoinableTaskFactory = _jtf
+                };
+
+                await _jtf.SwitchToMainThreadAsync();
 
                 // Act
                 var assetsPath = await testProject.GetAssetsFilePathAsync();
@@ -47,17 +66,19 @@ namespace NuGet.PackageManagement.VisualStudio.Test
         }
 
         [Fact]
-        public async Task LCPRP_WhenThereIsNoBaseIntermediateOutputPath_ThrowsException()
+        public async Task GetAssetsFilePathAsync_WithNoBaseIntermediateOutputPath_Throws()
         {
             // Arrange
-            using (var randomTestFolder = TestDirectory.Create())
+            using (TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new Mock<IVsProjectAdapter>();
-
                 var testProject = new LegacyCSProjPackageReferenceProject(
-                    project: testEnvDTEProjectAdapter.Object,
-                    projectId: String.Empty,
-                    callerIsUnitTest: true);
+                    project: Mock.Of<IVsProjectAdapter>(),
+                    projectId: Guid.NewGuid().ToString())
+                {
+                    JoinableTaskFactory = _jtf
+                };
+
+                await _jtf.SwitchToMainThreadAsync();
 
                 // Act & Assert
                 await Assert.ThrowsAsync<InvalidDataException>(
@@ -66,157 +87,202 @@ namespace NuGet.PackageManagement.VisualStudio.Test
         }
 
         [Fact]
-        public async Task LCPRP_PackageTargetFallback()
+        public async Task GetPackageSpecsAsync_WithPackageTargetFallback_Succeeds()
         {
             // Arrange
-            using (var randomTestFolder = TestDirectory.Create())
+            using (var testDirectory = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new VsProjectAdapterMock(randomTestFolder);
-                testEnvDTEProjectAdapter
-                    .Setup(x => x.PackageTargetFallback)
+                var projectAdapter = CreateProjectAdapter(testDirectory);
+                Mock.Get(projectAdapter)
+                    .SetupGet(x => x.PackageTargetFallback)
                     .Returns("portable-net45+win8;dnxcore50");
-                testEnvDTEProjectAdapter
-                    .Setup(x => x.TargetNuGetFramework)
-                    .Returns(new NuGetFramework("netstandard13"));
 
                 var testProject = new LegacyCSProjPackageReferenceProject(
-                    project: testEnvDTEProjectAdapter.Object,
-                    projectId: "",
-                    callerIsUnitTest: true);
+                    project: projectAdapter,
+                    projectId: Guid.NewGuid().ToString())
+                {
+                    JoinableTaskFactory = _jtf
+                };
 
                 var testDependencyGraphCacheContext = new DependencyGraphCacheContext();
 
+                await _jtf.SwitchToMainThreadAsync();
+
                 // Act
-                var installedPackages = await testProject.GetPackageSpecsAsync(testDependencyGraphCacheContext);
+                var packageSpecs = await testProject.GetPackageSpecsAsync(testDependencyGraphCacheContext);
 
                 // Assert
+                var actualTfi = packageSpecs.First().TargetFrameworks.First();
+                Assert.NotNull(actualTfi);
                 Assert.Equal(
-                    new List<NuGetFramework>() { NuGetFramework.Parse("portable-net45+win8"), NuGetFramework.Parse("dnxcore50") },
-                    installedPackages.First().TargetFrameworks.First().Imports.ToList());
-                Assert.IsType(typeof(FallbackFramework), installedPackages.First().TargetFrameworks.First().FrameworkName);
-                Assert.Equal(new List<NuGetFramework>() { NuGetFramework.Parse("portable-net45+win8"), NuGetFramework.Parse("dnxcore50") },
-                    ((FallbackFramework)(installedPackages.First().TargetFrameworks.First().FrameworkName)).Fallback);
+                    new List<NuGetFramework>()
+                    {
+                        NuGetFramework.Parse("portable-net45+win8"), NuGetFramework.Parse("dnxcore50")
+                    },
+                    actualTfi.Imports.ToList());
+                Assert.IsType<FallbackFramework>(actualTfi.FrameworkName);
+                Assert.Equal(
+                    new List<NuGetFramework>()
+                    {
+                        NuGetFramework.Parse("portable-net45+win8"), NuGetFramework.Parse("dnxcore50")
+                    },
+                    ((FallbackFramework)actualTfi.FrameworkName).Fallback);
             }
         }
 
         [Fact]
-        public async Task LCPRP_PackageVersion()
+        public async Task GetPackageSpecsAsync_WithVersion_Succeeds()
         {
             // Arrange
-            using (var randomTestFolder = TestDirectory.Create())
+            using (var testDirectory = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new VsProjectAdapterMock(randomTestFolder);
-                testEnvDTEProjectAdapter
-                    .Setup(x => x.TargetNuGetFramework)
-                    .Returns(new NuGetFramework("netstandard13"));
-                testEnvDTEProjectAdapter
-                    .Setup(x => x.Version)
+                var projectAdapter = CreateProjectAdapter(testDirectory);
+                Mock.Get(projectAdapter)
+                    .SetupGet(x => x.Version)
                     .Returns("2.2.3");
 
                 var testProject = new LegacyCSProjPackageReferenceProject(
-                    project: testEnvDTEProjectAdapter.Object,
-                    projectId: "",
-                    callerIsUnitTest: true);
+                    project: projectAdapter,
+                    projectId: Guid.NewGuid().ToString())
+                {
+                    JoinableTaskFactory = _jtf
+                };
 
                 var testDependencyGraphCacheContext = new DependencyGraphCacheContext();
 
+                await _jtf.SwitchToMainThreadAsync();
+
                 // Act
-                var installedPackages = await testProject.GetPackageSpecsAsync(testDependencyGraphCacheContext);
+                var packageSpecs = await testProject.GetPackageSpecsAsync(testDependencyGraphCacheContext);
 
                 // Assert
-                Assert.Equal(new NuGetVersion("2.2.3"), installedPackages.First().Version);
+                Assert.Equal("2.2.3", packageSpecs.First().Version.ToString());
             }
         }
 
         [Fact]
-        public async Task LCPRP_PackageVersion_Default()
+        public async Task GetPackageSpecsAsync_WithDefaultVersion_Succeeds()
         {
             // Arrange
-            using (var randomTestFolder = TestDirectory.Create())
+            using (var testDirectory = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new VsProjectAdapterMock(randomTestFolder);
-                testEnvDTEProjectAdapter
-                    .Setup(x => x.TargetNuGetFramework)
-                    .Returns(new NuGetFramework("netstandard13"));
+                var projectAdapter = CreateProjectAdapter(testDirectory);
 
                 var testProject = new LegacyCSProjPackageReferenceProject(
-                    project: testEnvDTEProjectAdapter.Object,
-                    projectId: "",
-                    callerIsUnitTest: true);
+                    project: projectAdapter,
+                    projectId: Guid.NewGuid().ToString())
+                {
+                    JoinableTaskFactory = _jtf
+                };
 
                 var testDependencyGraphCacheContext = new DependencyGraphCacheContext();
 
+                await _jtf.SwitchToMainThreadAsync();
+
                 // Act
-                var installedPackages = await testProject.GetPackageSpecsAsync(testDependencyGraphCacheContext);
+                var packageSpecs = await testProject.GetPackageSpecsAsync(testDependencyGraphCacheContext);
 
                 // Assert
-                Assert.Equal(new NuGetVersion("1.0.0"), installedPackages.First().Version);
+                Assert.Equal("1.0.0", packageSpecs.First().Version.ToString());
             }
         }
 
         [Fact]
-        public async Task LCPRP_Dependency_PackageVersion()
+        public async Task GetPackageSpecsAsync_WithPackageReference_Succeeds()
         {
             // Arrange
             using (var randomTestFolder = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new VsProjectAdapterMock(randomTestFolder);
-                testEnvDTEProjectAdapter
-                    .Setup(x => x.TargetNuGetFramework)
-                    .Returns(new NuGetFramework("netstandard13"));
-#if false
-                testEnvDTEProjectAdapter
-                    .Setup(x => x.GetLegacyCSProjPackageReferences(It.IsAny<Array>()))
-                    .Returns(new LegacyCSProjPackageReference[] 
-                        {
-                            new LegacyCSProjPackageReference(
-                                name: "packageA",
-                                version: "1.*",
-                                metadataElements: null,
-                                metadataValues: null,
-                                targetNuGetFramework: new NuGetFramework("netstandard13"))
-                        });
-#endif
+                var projectAdapter = CreateProjectAdapter(randomTestFolder);
+
+                var installedPackages = new[] { "packageA" };
+                var vsProject4 = Mock.Get(projectAdapter.Project.Object as VSProject4);
+                var packageReferences = Mock.Get(vsProject4.Object.PackageReferences);
+                packageReferences
+                    .SetupGet(x => x.InstalledPackages)
+                    .Returns(installedPackages);
+                var version = "1.*";
+                Array metadataElements = null;
+                Array metadataValues = null;
+                packageReferences
+                    .Setup(x => x.TryGetReference("packageA", It.IsAny<Array>(), out version, out metadataElements, out metadataValues))
+                    .Returns(true);
+
                 var testProject = new LegacyCSProjPackageReferenceProject(
-                    project: testEnvDTEProjectAdapter.Object,
-                    projectId: "",
-                    callerIsUnitTest: true);
+                    project: projectAdapter,
+                    projectId: Guid.NewGuid().ToString())
+                {
+                    JoinableTaskFactory = _jtf
+                };
 
                 var testDependencyGraphCacheContext = new DependencyGraphCacheContext();
 
+                await _jtf.SwitchToMainThreadAsync();
+
                 // Act
-                var packageSpec = await testProject.GetPackageSpecsAsync(testDependencyGraphCacheContext);
+                var packageSpecs = await testProject.GetPackageSpecsAsync(testDependencyGraphCacheContext);
 
                 // Assert
-                var dependency = packageSpec.First().Dependencies.First();
+                var dependency = packageSpecs.First().Dependencies.First();
                 Assert.NotNull(dependency);
                 Assert.Equal("packageA", dependency.LibraryRange.Name);
                 Assert.Equal(VersionRange.Parse("1.*"), dependency.LibraryRange.VersionRange);
             }
         }
 
-        private class VsProjectAdapterMock : Mock<IVsProjectAdapter>
+        private static Mock<IVsProjectAdapter> CreateProjectAdapter()
         {
-            public VsProjectAdapterMock()
-            {
-                Setup(x => x.Runtimes)
-                    .Returns(Enumerable.Empty<RuntimeDescription>);
-                Setup(x => x.Supports)
-                    .Returns(Enumerable.Empty<CompatibilityProfile>);
-                Setup(x => x.Version)
-                    .Returns("1.0.0");
-            }
+            var projectAdapter = new Mock<IVsProjectAdapter>();
 
-            public VsProjectAdapterMock(string fullPath): this()
-            {
-                Setup(x => x.FullPath)
-                    .Returns(Path.Combine(fullPath, "foo.csproj"));
+            var project = Mock.Of<EnvDTE.Project>();
 
-                var testBaseIntermediateOutputPath = Path.Combine(fullPath, "obj");
-                TestDirectory.Create(testBaseIntermediateOutputPath);
-                Setup(x => x.BaseIntermediateOutputPath)
-                    .Returns(testBaseIntermediateOutputPath);
-            }
+            var vsProject4 = Mock.Of<VSProject4>();
+            Mock.Get(project)
+                .SetupGet(x => x.Object)
+                .Returns(vsProject4);
+
+            var packageReferences = Mock.Of<PackageReferences>();
+            Mock.Get(vsProject4)
+                .SetupGet(x => x.PackageReferences)
+                .Returns(packageReferences);
+
+            var installedPackages = new string[] { };
+            Mock.Get(packageReferences)
+                .SetupGet(x => x.InstalledPackages)
+                .Returns(installedPackages);
+
+            projectAdapter
+                .SetupGet(x => x.Project)
+                .Returns(project);
+            projectAdapter
+                .Setup(x => x.GetRuntimes())
+                .Returns(Enumerable.Empty<RuntimeDescription>);
+            projectAdapter
+                .Setup(x => x.Supports)
+                .Returns(Enumerable.Empty<CompatibilityProfile>);
+            projectAdapter
+                .Setup(x => x.Version)
+                .Returns("1.0.0");
+            return projectAdapter;
+        }
+
+        private static IVsProjectAdapter CreateProjectAdapter(string fullPath)
+        {
+            var projectAdapter = CreateProjectAdapter();
+            projectAdapter
+                .Setup(x => x.FullPath)
+                .Returns(Path.Combine(fullPath, "foo.csproj"));
+            projectAdapter
+                .Setup(x => x.GetTargetFramework())
+                .Returns(new NuGetFramework("netstandard13"));
+
+            var testBaseIntermediateOutputPath = Path.Combine(fullPath, "obj");
+            TestDirectory.Create(testBaseIntermediateOutputPath);
+            projectAdapter
+                .Setup(x => x.BaseIntermediateOutputPath)
+                .Returns(testBaseIntermediateOutputPath);
+
+            return projectAdapter.Object;
         }
     }
 }

@@ -175,7 +175,7 @@ namespace NuGet.PackageManagement.VisualStudio
                     NuGetUIThreadHelper.JoinableTaskFactory.Run(async delegate
                         {
                             await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                            _targetFramework = VsProjectAdapter.GetTargetNuGetFramework();
+                            _targetFramework = await VsProjectAdapter.GetTargetFrameworkAsync();
                         });
                 }
 
@@ -363,7 +363,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             Debug.Assert(ThreadHelper.CheckAccess());
 
-            VsProjectAdapter.GetReferences().Add(name);
+            VsProjectAdapter.References.Add(name);
         }
 
         public virtual void AddImport(string targetFullPath, ImportLocation location)
@@ -418,7 +418,7 @@ namespace NuGet.PackageManagement.VisualStudio
                     assemblyFullPath = Path.Combine(projectFullPath, referencePath);
 
                     // Add a reference to the project
-                    var references = VsProjectAdapter.GetReferences();
+                    var references = VsProjectAdapter.References;
 
                     dynamic reference = references.Add(assemblyFullPath);
 
@@ -579,7 +579,7 @@ namespace NuGet.PackageManagement.VisualStudio
                         referenceName = Path.GetFileNameWithoutExtension(name);
                     }
 
-                    return VsProjectAdapter.GetReferences().Item(referenceName) != null;
+                    return VsProjectAdapter.References.Item(referenceName) != null;
                 }
                 catch
                 {
@@ -627,7 +627,7 @@ namespace NuGet.PackageManagement.VisualStudio
                     //        almost all the assemblies since Assembly Name is the same as the assembly file name
                     //        In case of F#, the input parameter is case-sensitive as well
                     //        Hence, an override to THIS function is added to take care of that
-                    var reference = VsProjectAdapter.GetReferences().Item(referenceName);
+                    var reference = VsProjectAdapter.References.Item(referenceName);
                     if (reference != null)
                     {
                         reference.Remove();
