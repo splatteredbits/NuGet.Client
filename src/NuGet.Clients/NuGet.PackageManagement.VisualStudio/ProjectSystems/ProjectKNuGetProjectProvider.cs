@@ -1,17 +1,12 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-using System;
 using System.ComponentModel.Composition;
-using System.Linq;
-using Microsoft.VisualStudio;
-using Microsoft.VisualStudio.ProjectSystem.Interop;
+using Microsoft;
 using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.Utilities;
 using NuGet.ProjectManagement;
 using NuGet.VisualStudio;
-using IServiceProvider = Microsoft.VisualStudio.OLE.Interop.IServiceProvider;
 
 namespace NuGet.PackageManagement.VisualStudio
 {
@@ -21,21 +16,19 @@ namespace NuGet.PackageManagement.VisualStudio
     {
         public bool TryCreateNuGetProject(IVsProjectAdapter project, ProjectSystemProviderContext context, out NuGetProject result)
         {
-            if (project == null)
-            {
-                throw new ArgumentNullException(nameof(project));
-            }
-
-            if (context == null)
-            {
-                throw new ArgumentNullException(nameof(context));
-            }
-
-            ThreadHelper.ThrowIfNotOnUIThread();
+            Assumes.Present(project);
+            Assumes.Present(context);
 
             result = null;
 
-            var projectK = GetProjectKProject(project);
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (project.IsLoadDeferred)
+            {
+                return false;
+            }
+
+            var projectK = EnvDTEProjectUtility.GetProjectSystemService(project.Project);
             if (projectK == null)
             {
                 return false;
@@ -48,52 +41,6 @@ namespace NuGet.PackageManagement.VisualStudio
                 project.ProjectId);
 
             return true;
-        }
-
-        public static INuGetPackageManager GetProjectKProject(IVsProjectAdapter project)
-        {
-            return !project.IsLoadDeferred ? GetProjectKProject(project.DteProject) : null;
-        }
-
-        public static INuGetPackageManager GetProjectKProject(EnvDTE.Project project)
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-
-            var vsProject = project as IVsProject;
-            if (vsProject == null)
-            {
-                return null;
-            }
-
-            IServiceProvider serviceProvider = null;
-            vsProject.GetItemContext(
-                (uint)VSConstants.VSITEMID.Root,
-                out serviceProvider);
-            if (serviceProvider == null)
-            {
-                return null;
-            }
-
-            using (var sp = new ServiceProvider(serviceProvider))
-            {
-                var retValue = sp.GetService(typeof(INuGetPackageManager));
-                if (retValue == null)
-                {
-                    return null;
-                }
-
-                if (!(retValue is INuGetPackageManager))
-                {
-                    // Workaround a bug in Dev14 prereleases where Lazy<INuGetPackageManager> was returned.
-                    var properties = retValue.GetType().GetProperties().Where(p => p.Name == "Value");
-                    if (properties.Count() == 1)
-                    {
-                        retValue = properties.First().GetValue(retValue);
-                    }
-                }
-
-                return retValue as INuGetPackageManager;
-            }
         }
     }
 }

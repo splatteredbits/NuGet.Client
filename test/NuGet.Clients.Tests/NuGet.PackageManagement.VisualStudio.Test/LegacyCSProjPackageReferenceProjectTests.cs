@@ -12,6 +12,7 @@ using NuGet.ProjectManagement;
 using NuGet.RuntimeModel;
 using NuGet.Test.Utility;
 using NuGet.Versioning;
+using NuGet.VisualStudio;
 using Xunit;
 using Task = System.Threading.Tasks.Task;
 
@@ -27,7 +28,7 @@ namespace NuGet.PackageManagement.VisualStudio.Test
             {
                 var testBaseIntermediateOutputPath = Path.Combine(randomTestFolder, "obj");
                 TestDirectory.Create(testBaseIntermediateOutputPath);
-                var testEnvDTEProjectAdapter = new Mock<IEnvDTEProjectAdapter>();
+                var testEnvDTEProjectAdapter = new Mock<IVsProjectAdapter>();
                 testEnvDTEProjectAdapter
                     .Setup(x => x.BaseIntermediateOutputPath)
                     .Returns(testBaseIntermediateOutputPath);
@@ -51,7 +52,7 @@ namespace NuGet.PackageManagement.VisualStudio.Test
             // Arrange
             using (var randomTestFolder = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new Mock<IEnvDTEProjectAdapter>();
+                var testEnvDTEProjectAdapter = new Mock<IVsProjectAdapter>();
 
                 var testProject = new LegacyCSProjPackageReferenceProject(
                     project: testEnvDTEProjectAdapter.Object,
@@ -70,7 +71,7 @@ namespace NuGet.PackageManagement.VisualStudio.Test
             // Arrange
             using (var randomTestFolder = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new EnvDTEProjectAdapterMock(randomTestFolder);
+                var testEnvDTEProjectAdapter = new VsProjectAdapterMock(randomTestFolder);
                 testEnvDTEProjectAdapter
                     .Setup(x => x.PackageTargetFallback)
                     .Returns("portable-net45+win8;dnxcore50");
@@ -104,7 +105,7 @@ namespace NuGet.PackageManagement.VisualStudio.Test
             // Arrange
             using (var randomTestFolder = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new EnvDTEProjectAdapterMock(randomTestFolder);
+                var testEnvDTEProjectAdapter = new VsProjectAdapterMock(randomTestFolder);
                 testEnvDTEProjectAdapter
                     .Setup(x => x.TargetNuGetFramework)
                     .Returns(new NuGetFramework("netstandard13"));
@@ -133,7 +134,7 @@ namespace NuGet.PackageManagement.VisualStudio.Test
             // Arrange
             using (var randomTestFolder = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new EnvDTEProjectAdapterMock(randomTestFolder);
+                var testEnvDTEProjectAdapter = new VsProjectAdapterMock(randomTestFolder);
                 testEnvDTEProjectAdapter
                     .Setup(x => x.TargetNuGetFramework)
                     .Returns(new NuGetFramework("netstandard13"));
@@ -159,10 +160,11 @@ namespace NuGet.PackageManagement.VisualStudio.Test
             // Arrange
             using (var randomTestFolder = TestDirectory.Create())
             {
-                var testEnvDTEProjectAdapter = new EnvDTEProjectAdapterMock(randomTestFolder);
+                var testEnvDTEProjectAdapter = new VsProjectAdapterMock(randomTestFolder);
                 testEnvDTEProjectAdapter
                     .Setup(x => x.TargetNuGetFramework)
                     .Returns(new NuGetFramework("netstandard13"));
+#if false
                 testEnvDTEProjectAdapter
                     .Setup(x => x.GetLegacyCSProjPackageReferences(It.IsAny<Array>()))
                     .Returns(new LegacyCSProjPackageReference[] 
@@ -174,7 +176,7 @@ namespace NuGet.PackageManagement.VisualStudio.Test
                                 metadataValues: null,
                                 targetNuGetFramework: new NuGetFramework("netstandard13"))
                         });
-
+#endif
                 var testProject = new LegacyCSProjPackageReferenceProject(
                     project: testEnvDTEProjectAdapter.Object,
                     projectId: "",
@@ -193,14 +195,10 @@ namespace NuGet.PackageManagement.VisualStudio.Test
             }
         }
 
-        private class EnvDTEProjectAdapterMock : Mock<IEnvDTEProjectAdapter>
+        private class VsProjectAdapterMock : Mock<IVsProjectAdapter>
         {
-            public EnvDTEProjectAdapterMock()
+            public VsProjectAdapterMock()
             {
-                Setup(x => x.GetLegacyCSProjPackageReferences(It.IsAny<Array>()))
-                    .Returns(Array.Empty<LegacyCSProjPackageReference>);
-                Setup(x => x.GetLegacyCSProjProjectReferences(It.IsAny<Array>()))
-                    .Returns(Array.Empty<LegacyCSProjProjectReference>);
                 Setup(x => x.Runtimes)
                     .Returns(Enumerable.Empty<RuntimeDescription>);
                 Setup(x => x.Supports)
@@ -209,9 +207,9 @@ namespace NuGet.PackageManagement.VisualStudio.Test
                     .Returns("1.0.0");
             }
 
-            public EnvDTEProjectAdapterMock(string fullPath): this()
+            public VsProjectAdapterMock(string fullPath): this()
             {
-                Setup(x => x.ProjectFullPath)
+                Setup(x => x.FullPath)
                     .Returns(Path.Combine(fullPath, "foo.csproj"));
 
                 var testBaseIntermediateOutputPath = Path.Combine(fullPath, "obj");

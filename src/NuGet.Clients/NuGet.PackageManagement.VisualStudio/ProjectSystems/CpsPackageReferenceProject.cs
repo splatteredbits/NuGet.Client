@@ -96,7 +96,7 @@ namespace NuGet.PackageManagement.VisualStudio
             return
                 await
                     ScriptExecutorUtil.ExecuteScriptAsync(identity, packageInstallPath, projectContext, ScriptExecutor,
-                        _vsProjectAdapter.DteProject, throwOnFailure);
+                        _vsProjectAdapter.Project, throwOnFailure);
         }
 
         public override async Task<String> GetAssetsFilePathAsync()

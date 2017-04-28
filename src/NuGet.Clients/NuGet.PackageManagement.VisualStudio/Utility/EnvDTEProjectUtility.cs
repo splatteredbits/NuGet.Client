@@ -14,6 +14,7 @@ using Microsoft;
 using Microsoft.Build.Evaluation;
 using Microsoft.CSharp.RuntimeBinder;
 using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.ProjectSystem.Interop;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using NuGet.Common;
@@ -445,7 +446,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            if (SupportsINuGetProjectSystem(envDTEProject))
+            if (SupportsProjectSystemService(envDTEProject))
             {
                 return true;
             }
@@ -726,12 +727,53 @@ namespace NuGet.PackageManagement.VisualStudio
             return IsExplicitlyUnsupported(parentEnvDTEProject);
         }
 
-        public static bool SupportsINuGetProjectSystem(EnvDTE.Project envDTEProject)
+        public static bool SupportsProjectSystemService(EnvDTE.Project envDTEProject)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            var projectKProject = ProjectKNuGetProjectProvider.GetProjectKProject(envDTEProject);
+            var projectKProject = GetProjectSystemService(envDTEProject);
             return projectKProject != null;
+        }
+
+        public static INuGetPackageManager GetProjectSystemService(EnvDTE.Project project)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            var vsProject = project as IVsProject;
+            if (vsProject == null)
+            {
+                return null;
+            }
+
+            Microsoft.VisualStudio.OLE.Interop.IServiceProvider serviceProvider = null;
+            vsProject.GetItemContext(
+                (uint)VSConstants.VSITEMID.Root,
+                out serviceProvider);
+            if (serviceProvider == null)
+            {
+                return null;
+            }
+
+            using (var sp = new ServiceProvider(serviceProvider))
+            {
+                var retValue = sp.GetService(typeof(INuGetPackageManager));
+                if (retValue == null)
+                {
+                    return null;
+                }
+
+                if (!(retValue is INuGetPackageManager))
+                {
+                    // Workaround a bug in Dev14 prereleases where Lazy<INuGetPackageManager> was returned.
+                    var properties = retValue.GetType().GetProperties().Where(p => p.Name == "Value");
+                    if (properties.Count() == 1)
+                    {
+                        retValue = properties.First().GetValue(retValue);
+                    }
+                }
+
+                return retValue as INuGetPackageManager;
+            }
         }
 
         public static bool SupportsBindingRedirects(EnvDTE.Project envDTEProject)

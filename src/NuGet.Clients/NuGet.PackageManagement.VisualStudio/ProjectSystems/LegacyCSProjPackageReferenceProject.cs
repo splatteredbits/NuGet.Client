@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft;
 using Microsoft.VisualStudio.Shell;
 using NuGet.Commands;
 using NuGet.Frameworks;
@@ -19,6 +20,7 @@ using NuGet.ProjectModel;
 using NuGet.RuntimeModel;
 using NuGet.Versioning;
 using NuGet.VisualStudio;
+using VSLangProj150;
 
 namespace NuGet.PackageManagement.VisualStudio
 {
@@ -28,13 +30,14 @@ namespace NuGet.PackageManagement.VisualStudio
     /// </summary>
     public class LegacyCSProjPackageReferenceProject : BuildIntegratedNuGetProject
     {
-        private const string _includeAssets = "IncludeAssets";
-        private const string _excludeAssets = "ExcludeAssets";
-        private const string _privateAssets = "PrivateAssets";
+        private const string IncludeAssets = "IncludeAssets";
+        private const string ExcludeAssets = "ExcludeAssets";
+        private const string PrivateAssets = "PrivateAssets";
 
         private static Array _desiredPackageReferenceMetadata;
 
-        private readonly IEnvDTEProjectAdapter _project;
+        private readonly IVsProjectAdapter _project;
+        private readonly Lazy<VSProject4> _asVSProject4;
 
         private IScriptExecutor _scriptExecutor;
         private string _projectName;
@@ -45,25 +48,24 @@ namespace NuGet.PackageManagement.VisualStudio
         static LegacyCSProjPackageReferenceProject()
         {
             _desiredPackageReferenceMetadata = Array.CreateInstance(typeof(string), 3);
-            _desiredPackageReferenceMetadata.SetValue(_includeAssets, 0);
-            _desiredPackageReferenceMetadata.SetValue(_excludeAssets, 1);
-            _desiredPackageReferenceMetadata.SetValue(_privateAssets, 2);
+            _desiredPackageReferenceMetadata.SetValue(IncludeAssets, 0);
+            _desiredPackageReferenceMetadata.SetValue(ExcludeAssets, 1);
+            _desiredPackageReferenceMetadata.SetValue(PrivateAssets, 2);
         }
 
         public LegacyCSProjPackageReferenceProject(
-            IEnvDTEProjectAdapter project,
+            IVsProjectAdapter project,
             string projectId,
             bool callerIsUnitTest = false)
         {
-            if (project == null)
-            {
-                throw new ArgumentNullException(nameof(project));
-            }
+            Assumes.Present(project);
 
             _project = project;
-            _projectName = _project.Name;
+            _asVSProject4 = new Lazy<VSProject4>(() => _project.Project.Object as VSProject4);
+
+            _projectName = _project.ProjectName;
             _projectUniqueName = _project.UniqueName;
-            _projectFullPath = _project.ProjectFullPath;
+            _projectFullPath = _project.FullPath;
             _callerIsUnitTest = callerIsUnitTest;
 
             InternalMetadata.Add(NuGetProjectMetadataKeys.Name, _projectName);
@@ -73,6 +75,8 @@ namespace NuGet.PackageManagement.VisualStudio
         }
 
         public override string ProjectName => _projectName;
+
+        private VSProject4 AsVSProject4 => _asVSProject4.Value;
 
         private IScriptExecutor ScriptExecutor
         {
@@ -118,7 +122,7 @@ namespace NuGet.PackageManagement.VisualStudio
             return
                 await
                     ScriptExecutorUtil.ExecuteScriptAsync(identity, packageInstallPath, projectContext, ScriptExecutor,
-                        _project.DTEProject, throwOnFailure);
+                        _project.Project, throwOnFailure);
         }
 
         #region IDependencyGraphProject
@@ -151,7 +155,7 @@ namespace NuGet.PackageManagement.VisualStudio
             return GetPackageReferences(await GetPackageSpecAsync());
         }
 
-        public override async Task<Boolean> InstallPackageAsync(
+        public override async Task<bool> InstallPackageAsync(
             string packageId,
             VersionRange range,
             INuGetProjectContext nuGetProjectContext,
@@ -164,7 +168,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 metadataValues: new string[0]);
         }
 
-        public async Task<Boolean> InstallPackageWithMetadataAsync(
+        public async Task<bool> InstallPackageWithMetadataAsync(
             string packageId,
             VersionRange range,
             IEnumerable<string> metadataElements,
@@ -177,7 +181,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
                 // We don't adjust package reference metadata from UI
-                _project.AddOrUpdateLegacyCSProjPackage(
+                AddOrUpdateLegacyCSProjPackage(
                     packageId,
                     range.OriginalString ?? range.ToShortString(),
                     metadataElements?.ToArray() ?? new string[0],
@@ -189,19 +193,48 @@ namespace NuGet.PackageManagement.VisualStudio
             return success;
         }
 
-        public override async Task<Boolean> UninstallPackageAsync(PackageIdentity packageIdentity, INuGetProjectContext nuGetProjectContext, CancellationToken token)
+        /// <summary>
+        /// Add a new package reference or update an existing one on a legacy CSProj project
+        /// </summary>
+        /// <param name="packageName">Name of package to add or update</param>
+        /// <param name="packageVersion">Version of new package/new version of existing package</param>
+        /// <param name="metadataElements">Element names of metadata to add to package reference</param>
+        /// <param name="metadataValues">Element values of metadata to add to package reference</param>
+        private void AddOrUpdateLegacyCSProjPackage(string packageName, string packageVersion, string[] metadataElements, string[] metadataValues)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            // Note that API behavior is:
+            // - specify a metadata element name with a value => add/replace that metadata item on the package reference
+            // - specify a metadata element name with no value => remove that metadata item from the project reference
+            // - don't specify a particular metadata name => if it exists on the package reference, don't change it (e.g. for user defined metadata)
+            AsVSProject4.PackageReferences.AddOrUpdate(packageName, packageVersion, metadataElements, metadataValues);
+        }
+
+        public override async Task<bool> UninstallPackageAsync(PackageIdentity packageIdentity, INuGetProjectContext nuGetProjectContext, CancellationToken token)
         {
             var success = false;
             await NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(async delegate
             {
                 await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                _project.RemoveLegacyCSProjPackage(packageIdentity.Id);
+                RemoveLegacyCSProjPackage(packageIdentity.Id);
 
                 success = true;
             });
 
             return success;
+        }
+
+        /// <summary>
+        /// Remove a package reference from a legacy CSProj project
+        /// </summary>
+        /// <param name="packageName">Name of package to remove from project</param>
+        private void RemoveLegacyCSProjPackage(string packageName)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            AsVSProject4.PackageReferences.Remove(packageName);
         }
 
         #endregion
@@ -288,10 +321,10 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             EnsureUIThread();
 
-            var projectReferences = _project.GetLegacyCSProjProjectReferences(_desiredPackageReferenceMetadata)
+            var projectReferences = GetLegacyCSProjProjectReferences(_desiredPackageReferenceMetadata)
                 .Select(ToProjectRestoreReference);
 
-            var packageReferences = _project.GetLegacyCSProjPackageReferences(_desiredPackageReferenceMetadata)
+            var packageReferences = GetLegacyCSProjPackageReferences(_desiredPackageReferenceMetadata)
                 .Select(ToPackageLibraryDependency).ToList();
 
             var packageTargetFallback = _project.PackageTargetFallback?.Split(new[] { ';' })
@@ -350,6 +383,60 @@ namespace NuGet.PackageManagement.VisualStudio
             };
         }
 
+        /// <summary>
+        /// Project references for legacy CSProj project
+        /// </summary>
+        /// <param name="desiredMetadata">metadata element names requested in returned objects</param>
+        /// <returns>An array of returned data for each project reference discovered</returns>
+        private IEnumerable<LegacyCSProjProjectReference> GetLegacyCSProjProjectReferences(Array desiredMetadata)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            foreach (var reference in AsVSProject4.References.Cast<Reference6>().Where(r => r.SourceProject != null))
+            {
+                Array metadataElements;
+                Array metadataValues;
+                reference.GetMetadata(desiredMetadata, out metadataElements, out metadataValues);
+
+                yield return new LegacyCSProjProjectReference(
+                    uniqueName: reference.SourceProject.FullName,
+                    metadataElements: metadataElements,
+                    metadataValues: metadataValues);
+            }
+        }
+
+        /// <summary>
+        /// Package references for legacy CSProj project
+        /// </summary>
+        /// <param name="desiredMetadata">metadata element names requested in returned objects</param>
+        /// <returns>An array of returned data for each package reference discovered</returns>
+        private IEnumerable<LegacyCSProjPackageReference> GetLegacyCSProjPackageReferences(Array desiredMetadata)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            var installedPackages = AsVSProject4.PackageReferences.InstalledPackages;
+            var packageReferences = new List<LegacyCSProjPackageReference>();
+
+            foreach (var installedPackage in installedPackages)
+            {
+                var installedPackageName = installedPackage as string;
+                if (!string.IsNullOrEmpty(installedPackageName))
+                {
+                    string version;
+                    Array metadataElements;
+                    Array metadataValues;
+                    AsVSProject4.PackageReferences.TryGetReference(installedPackageName, desiredMetadata, out version, out metadataElements, out metadataValues);
+
+                    yield return new LegacyCSProjPackageReference(
+                        name: installedPackageName,
+                        version: version,
+                        metadataElements: metadataElements,
+                        metadataValues: metadataValues,
+                        targetNuGetFramework: _project.TargetNuGetFramework);
+                }
+            }
+        }
+
         private static ProjectRestoreReference ToProjectRestoreReference(LegacyCSProjProjectReference item)
         {
             var reference = new ProjectRestoreReference()
@@ -360,9 +447,9 @@ namespace NuGet.PackageManagement.VisualStudio
 
             MSBuildRestoreUtility.ApplyIncludeFlags(
                 reference,
-                GetProjectMetadataValue(item, _includeAssets),
-                GetProjectMetadataValue(item, _excludeAssets),
-                GetProjectMetadataValue(item, _privateAssets));
+                GetProjectMetadataValue(item, IncludeAssets),
+                GetProjectMetadataValue(item, ExcludeAssets),
+                GetProjectMetadataValue(item, PrivateAssets));
 
             return reference;
         }
@@ -379,9 +466,9 @@ namespace NuGet.PackageManagement.VisualStudio
 
             MSBuildRestoreUtility.ApplyIncludeFlags(
                 dependency,
-                GetPackageMetadataValue(item, _includeAssets),
-                GetPackageMetadataValue(item, _excludeAssets),
-                GetPackageMetadataValue(item, _privateAssets));
+                GetPackageMetadataValue(item, IncludeAssets),
+                GetPackageMetadataValue(item, ExcludeAssets),
+                GetPackageMetadataValue(item, PrivateAssets));
 
             return dependency;
         }
@@ -400,7 +487,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
             if (item.MetadataElements == null || item.MetadataValues == null)
             {
-                return String.Empty; // no metadata for project
+                return string.Empty; // no metadata for project
             }
 
             var index = Array.IndexOf(item.MetadataElements, metadataElement);
@@ -426,7 +513,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
             if (item.MetadataElements == null || item.MetadataValues == null)
             {
-                return String.Empty; // no metadata for package
+                return string.Empty; // no metadata for package
             }
 
             var index = Array.IndexOf(item.MetadataElements, metadataElement);
@@ -445,7 +532,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 return uiThreadFunction();
             }
 
-            T result = default(T);
+            var result = default(T);
             await NuGetUIThreadHelper.JoinableTaskFactory.RunAsync(async delegate
             {
                 await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();

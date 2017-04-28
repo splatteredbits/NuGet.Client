@@ -41,7 +41,7 @@ namespace NuGet.PackageManagement.VisualStudio
             Assumes.Present(context);
 
             var resolvedProjects = context.DeferredPackageSpecs.Select(project => project.Name);
-            return VSProjectRestoreReferenceUtility.GetDirectProjectReferencesAsync(_vsProjectAdapter.DteProject, resolvedProjects, context.Logger);
+            return VSProjectRestoreReferenceUtility.GetDirectProjectReferencesAsync(_vsProjectAdapter.Project, resolvedProjects, context.Logger);
         }
     }
 }

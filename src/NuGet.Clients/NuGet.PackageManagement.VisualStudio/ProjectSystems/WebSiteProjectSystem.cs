@@ -42,7 +42,7 @@ namespace NuGet.PackageManagement.VisualStudio
                     var name = Path.GetFileNameWithoutExtension(referencePath);
                     try
                     {
-                        EnvDTEProjectUtility.GetAssemblyReferences(VsProjectAdapter.DteProject).AddFromFile(PathUtility.GetAbsolutePath(ProjectFullPath, referencePath));
+                        EnvDTEProjectUtility.GetAssemblyReferences(VsProjectAdapter.Project).AddFromFile(PathUtility.GetAbsolutePath(ProjectFullPath, referencePath));
 
                         // Always create a refresh file. Vs does this for us in most cases, however for GACed binaries, it resorts to adding a web.config entry instead.
                         // This may result in deployment issues. To work around ths, we'll always attempt to add a file to the bin.
@@ -61,7 +61,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             Debug.Assert(ThreadHelper.CheckAccess());
 
-            EnvDTEProjectUtility.GetAssemblyReferences(VsProjectAdapter.DteProject).AddFromGAC(name);
+            EnvDTEProjectUtility.GetAssemblyReferences(VsProjectAdapter.Project).AddFromGAC(name);
         }
 
         public override void RemoveReference(string name)
@@ -106,7 +106,7 @@ namespace NuGet.PackageManagement.VisualStudio
             AssemblyReference reference = null;
             try
             {
-                reference = EnvDTEProjectUtility.GetAssemblyReferences(VsProjectAdapter.DteProject).Item(referenceName);
+                reference = EnvDTEProjectUtility.GetAssemblyReferences(VsProjectAdapter.Project).Item(referenceName);
                 if (reference != null)
                 {
                     reference.Remove();

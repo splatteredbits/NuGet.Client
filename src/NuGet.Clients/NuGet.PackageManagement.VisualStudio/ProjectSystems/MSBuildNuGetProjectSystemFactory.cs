@@ -41,7 +41,7 @@ namespace NuGet.PackageManagement.VisualStudio
                         Strings.DTE_ProjectUnsupported, vsProjectAdapter.ProjectName));
             }
 
-            if (VsProjectAdapterUtility.SupportsINuGetProjectSystem(vsProjectAdapter))
+            if (vsProjectAdapter.SupportsProjectSystemService)
             {
                 throw new InvalidOperationException(
                     string.Format(CultureInfo.CurrentCulture, Strings.DTE_ProjectUnsupported, typeof(IMSBuildNuGetProjectSystem).FullName));

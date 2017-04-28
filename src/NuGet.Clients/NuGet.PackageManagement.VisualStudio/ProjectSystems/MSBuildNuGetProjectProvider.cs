@@ -1,9 +1,9 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-using System;
 using System.ComponentModel.Composition;
 using System.IO;
+using Microsoft;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Utilities;
 using NuGet.Common;
@@ -23,23 +23,16 @@ namespace NuGet.PackageManagement.VisualStudio
     {
         public bool TryCreateNuGetProject(IVsProjectAdapter vsProjectAdapter, ProjectSystemProviderContext context, out NuGetProject result)
         {
-            if (vsProjectAdapter == null)
-            {
-                throw new ArgumentNullException(nameof(vsProjectAdapter));
-            }
-
-            if (context == null)
-            {
-                throw new ArgumentNullException(nameof(context));
-            }
+            Assumes.Present(vsProjectAdapter);
+            Assumes.Present(context);
 
             ThreadHelper.ThrowIfNotOnUIThread();
 
             result = null;
 
             var msBuildNuGetProjectSystem = MSBuildNuGetProjectSystemFactory.CreateMSBuildNuGetProjectSystem(
-                                vsProjectAdapter,
-                                context.ProjectContext);
+                vsProjectAdapter,
+                context.ProjectContext);
 
             var isWebSite = msBuildNuGetProjectSystem is WebSiteProjectSystem;
 

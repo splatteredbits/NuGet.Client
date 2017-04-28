@@ -4,8 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
-using EnvDTE;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
@@ -19,7 +19,7 @@ namespace NuGet.VisualStudio
     {
         private const string VsWindowKindSolutionExplorer = "3AE79031-E1BC-11D0-8F78-00A0C9110057";
 
-        public static IVsHierarchy ToVsHierarchy(Project project)
+        public static IVsHierarchy ToVsHierarchy(EnvDTE.Project project)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -43,10 +43,10 @@ namespace NuGet.VisualStudio
 
             var buildPropertyStorage = pHierarchy as IVsBuildPropertyStorage;
 
-            return GetMSBuildProperty(buildPropertyStorage, name);
+            return GetBuildProperty(buildPropertyStorage, name);
         }
 
-        public static string GetMSBuildProperty(IVsBuildPropertyStorage buildPropertyStorage, string name)
+        public static string GetBuildProperty(IVsBuildPropertyStorage buildPropertyStorage, string name)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -77,7 +77,7 @@ namespace NuGet.VisualStudio
             return projectPath;
         }
 
-        public static string[] GetProjectTypeGuids(Project project)
+        public static string[] GetProjectTypeGuids(EnvDTE.Project project)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -114,17 +114,17 @@ namespace NuGet.VisualStudio
         /// Gets the EnvDTE.Project instance from IVsHierarchy
         /// </summary>
         /// <param name="pHierarchy">pHierarchy is the IVsHierarchy instance from which the project instance is obtained</param>
-        public static Project GetProjectFromHierarchy(IVsHierarchy pHierarchy)
+        public static EnvDTE.Project GetProjectFromHierarchy(IVsHierarchy pHierarchy)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
             // Set it to null to avoid unassigned local variable warning
-            Project project = null;
+            EnvDTE.Project project = null;
             object projectObject;
 
             if (pHierarchy.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ExtObject, out projectObject) >= 0)
             {
-                project = (Project)projectObject;
+                project = (EnvDTE.Project)projectObject;
             }
 
             return project;
@@ -136,13 +136,13 @@ namespace NuGet.VisualStudio
             // this operation needs to execute on UI thread
             await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-            var dte = ServiceLocator.GetInstance<DTE>();
+            var dte = ServiceLocator.GetInstance<EnvDTE.DTE>();
             var projects = dte.Solution.Projects;
 
             var results = new Dictionary<string, ISet<VsHierarchyItem>>(StringComparer.OrdinalIgnoreCase);
-            foreach (Project project in projects)
+            foreach (var project in projects.Cast< EnvDTE.Project>())
             {
-                ICollection<VsHierarchyItem> expandedNodes =
+                var expandedNodes =
                     GetExpandedProjectHierarchyItems(project);
                 Debug.Assert(!results.ContainsKey(EnvDTEProjectInfoUtility.GetUniqueName(project)));
                 results[EnvDTEProjectInfoUtility.GetUniqueName(project)] =
@@ -157,10 +157,10 @@ namespace NuGet.VisualStudio
             // this operation needs to execute on UI thread
             await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-            var dte = ServiceLocator.GetInstance<DTE>();
+            var dte = ServiceLocator.GetInstance<EnvDTE.DTE>();
             var projects = dte.Solution.Projects;
 
-            foreach (Project project in projects)
+            foreach (var project in projects.Cast< EnvDTE.Project>())
             {
                 ISet<VsHierarchyItem> expandedNodes;
                 if (ignoreNodes.TryGetValue(EnvDTEProjectInfoUtility.GetUniqueName(project), out expandedNodes)
@@ -172,7 +172,7 @@ namespace NuGet.VisualStudio
             }
         }
 
-        private static ICollection<VsHierarchyItem> GetExpandedProjectHierarchyItems(Project project)
+        private static ICollection<VsHierarchyItem> GetExpandedProjectHierarchyItems(EnvDTE.Project project)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -208,7 +208,7 @@ namespace NuGet.VisualStudio
             return expandedItems;
         }
 
-        private static void CollapseProjectHierarchyItems(Project project, ISet<VsHierarchyItem> ignoredHierarcyItems)
+        private static void CollapseProjectHierarchyItems(EnvDTE.Project project, ISet<VsHierarchyItem> ignoredHierarcyItems)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -250,7 +250,7 @@ namespace NuGet.VisualStudio
                 return;
             }
 
-            vsHierarchyWindow.ExpandItem(vsHierarchyItem.UIHierarchy(), vsHierarchyItem.VsItemID, EXPANDFLAGS.EXPF_CollapseFolder);
+            vsHierarchyWindow.ExpandItem(AsVsUIHierarchy(vsHierarchyItem), vsHierarchyItem.VsItemID, EXPANDFLAGS.EXPF_CollapseFolder);
         }
 
         private static bool IsVsHierarchyItemExpanded(VsHierarchyItem hierarchyItem, IVsUIHierarchyWindow uiWindow)
@@ -265,8 +265,15 @@ namespace NuGet.VisualStudio
             const uint expandedStateMask = (uint)__VSHIERARCHYITEMSTATE.HIS_Expanded;
             uint itemState;
 
-            uiWindow.GetItemState(hierarchyItem.UIHierarchy(), hierarchyItem.VsItemID, expandedStateMask, out itemState);
+            uiWindow.GetItemState(AsVsUIHierarchy(hierarchyItem), hierarchyItem.VsItemID, expandedStateMask, out itemState);
             return ((__VSHIERARCHYITEMSTATE)itemState == __VSHIERARCHYITEMSTATE.HIS_Expanded);
+        }
+
+        private static IVsUIHierarchy AsVsUIHierarchy(VsHierarchyItem hierarchyItem)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            return hierarchyItem.VsHierarchy as IVsUIHierarchy;
         }
 
         private static IVsUIHierarchyWindow GetSolutionExplorerHierarchyWindow()

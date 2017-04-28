@@ -3,11 +3,13 @@
 
 using System;
 using System.ComponentModel.Composition;
-using Microsoft.VisualStudio.ProjectSystem.Properties;
+using Microsoft;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Utilities;
 using NuGet.ProjectManagement;
+using NuGet.ProjectModel;
 using NuGet.VisualStudio;
+using VSLangProj150;
 using ProjectSystem = Microsoft.VisualStudio.ProjectSystem;
 
 namespace NuGet.PackageManagement.VisualStudio
@@ -17,6 +19,8 @@ namespace NuGet.PackageManagement.VisualStudio
     [Order(After = nameof(CpsPackageReferenceProjectProvider))]
     public class LegacyCSProjPackageReferenceProjectProvider : IProjectSystemProvider
     {
+        private const string RestoreProjectStyle = nameof(RestoreProjectStyle);
+
         private readonly IProjectSystemCache _projectSystemCache;
 
         // Reason it's lazy<object> is because we don't want to load any CPS assemblies untill
@@ -27,32 +31,21 @@ namespace NuGet.PackageManagement.VisualStudio
         [ImportingConstructor]
         public LegacyCSProjPackageReferenceProjectProvider(IProjectSystemCache projectSystemCache)
         {
-            if (projectSystemCache == null)
-            {
-                throw new ArgumentNullException(nameof(projectSystemCache));
-            }
+            Assumes.Present(projectSystemCache);
 
             _projectSystemCache = projectSystemCache;
         }
         
         public bool TryCreateNuGetProject(IVsProjectAdapter vsProjectAdapter, ProjectSystemProviderContext context, out NuGetProject result)
         {
-            if (vsProjectAdapter == null)
-            {
-                throw new ArgumentNullException(nameof(vsProjectAdapter));
-            }
-
-            if (context == null)
-            {
-                throw new ArgumentNullException(nameof(context));
-            }
+            Assumes.Present(vsProjectAdapter);
+            Assumes.Present(context);
 
             ThreadHelper.ThrowIfNotOnUIThread();
 
             result = null;
 
-            var project = new EnvDTEProjectAdapter(vsProjectAdapter.DteProject);
-            if (!project.IsLegacyCSProjPackageReferenceProject)
+            if (vsProjectAdapter.IsLoadDeferred || !IsLegacyCSProjPackageReferenceProject(vsProjectAdapter))
             {
                 return false;
             }
@@ -61,10 +54,46 @@ namespace NuGet.PackageManagement.VisualStudio
             NuGetUIThreadHelper.SetJoinableTaskFactoryFromService(ProjectServiceAccessor.Value as ProjectSystem.IProjectServiceAccessor);
 
             result = new LegacyCSProjPackageReferenceProject(
-                project,
+                vsProjectAdapter,
                 vsProjectAdapter.ProjectId);
 
             return true;
+        }
+
+        /// <summary>
+        /// Is this project a non-CPS package reference based csproj?
+        /// </summary>
+        public bool IsLegacyCSProjPackageReferenceProject(IVsProjectAdapter _project)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            var isLegacyCSProjPackageReferenceProject = false;
+            var asVSProject4 = _project.Project.Object as VSProject4;
+
+            // A legacy CSProj must cast to VSProject4 to manipulate package references
+            if (asVSProject4 == null)
+            {
+                isLegacyCSProjPackageReferenceProject = false;
+            }
+            else
+            {
+                // Check for RestoreProjectStyle property
+                var restoreProjectStyle = _project.GetBuildProperty(RestoreProjectStyle);
+
+                // For legacy csproj, either the RestoreProjectStyle must be set to PackageReference or
+                // project has atleast one package dependency defined as PackageReference
+                if (restoreProjectStyle?.Equals(ProjectStyle.PackageReference.ToString(), StringComparison.OrdinalIgnoreCase) ?? false
+                    || (asVSProject4.PackageReferences?.InstalledPackages?.Length ?? 0) > 0)
+                {
+                    isLegacyCSProjPackageReferenceProject = true;
+                }
+                else
+                {
+                    isLegacyCSProjPackageReferenceProject = false;
+                }
+            }
+
+            return isLegacyCSProjPackageReferenceProject;
         }
     }
 }

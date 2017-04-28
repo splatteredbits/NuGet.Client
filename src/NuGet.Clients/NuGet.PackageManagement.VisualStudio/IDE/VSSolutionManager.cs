@@ -214,7 +214,7 @@ namespace NuGet.PackageManagement.VisualStudio
                     () => PackagesFolderPathUtility.GetPackagesFolderPath(this, settings));
 
                 return new LegacyCSProjPackageReferenceProject(
-                    new EnvDTEProjectAdapter(vsProjectAdapter.DteProject),
+                    vsProjectAdapter,
                     vsProjectAdapter.ProjectId);
             });
 

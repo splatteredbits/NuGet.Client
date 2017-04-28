@@ -1,12 +1,11 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using Microsoft;
 using Microsoft.VisualStudio;
-using Microsoft.VisualStudio.Shell.Interop;
-using System;
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 
 namespace NuGet.VisualStudio
 {
@@ -57,25 +56,16 @@ namespace NuGet.VisualStudio
             return result == VSConstants.S_OK;
         }
 
-        internal uint VsItemID
-        {
-            get { return _vsitemid; }
-        }
+        internal uint VsItemID => _vsitemid;
 
         internal bool IsExpandable()
         {
-            object o = GetProperty(__VSHPROPID.VSHPROPID_Expandable);
+            var o = GetProperty(__VSHPROPID.VSHPROPID_Expandable);
             if (o is bool)
             {
                 return (bool)o;
             }
             return (o is int) && (int)o != 0;
-        }
-
-        [SuppressMessage("Microsoft.VisualStudio.Threading.Analyzers", "VSTHRD010", Justification = "NuGet/Home#4833 Baseline")]
-        public IVsUIHierarchy UIHierarchy()
-        {
-            return _hierarchy as IVsUIHierarchy;
         }
 
         private object GetProperty(__VSHPROPID propid)

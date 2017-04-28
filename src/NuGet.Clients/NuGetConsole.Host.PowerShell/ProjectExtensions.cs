@@ -46,7 +46,7 @@ namespace NuGetConsole.Host.PowerShell.Implementation
                 }
 
                 var dte = ServiceLocator.GetInstance<DTE>();
-                dte.Solution.Remove(project.DteProject);
+                dte.Solution.Remove(project.Project);
             }
         }
     }

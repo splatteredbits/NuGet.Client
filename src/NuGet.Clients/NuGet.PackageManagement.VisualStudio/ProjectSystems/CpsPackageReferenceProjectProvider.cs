@@ -77,11 +77,11 @@ namespace NuGet.PackageManagement.VisualStudio
             var buildPropertyStorage = hierarchy as IVsBuildPropertyStorage;
 
             // read MSBuild property RestoreProjectStyle, TargetFramework, and TargetFrameworks
-            var restoreProjectStyle = VsHierarchyUtility.GetMSBuildProperty(buildPropertyStorage, RestoreProjectStyle);
+            var restoreProjectStyle = VsHierarchyUtility.GetBuildProperty(buildPropertyStorage, RestoreProjectStyle);
 
-            var targetFramework = VsHierarchyUtility.GetMSBuildProperty(buildPropertyStorage, TargetFramework);
+            var targetFramework = VsHierarchyUtility.GetBuildProperty(buildPropertyStorage, TargetFramework);
 
-            var targetFrameworks = VsHierarchyUtility.GetMSBuildProperty(buildPropertyStorage, TargetFrameworks);
+            var targetFrameworks = VsHierarchyUtility.GetBuildProperty(buildPropertyStorage, TargetFrameworks);
 
             // check for RestoreProjectStyle property is set and if not set to PackageReference then return false
             if (!(string.IsNullOrEmpty(restoreProjectStyle) || 

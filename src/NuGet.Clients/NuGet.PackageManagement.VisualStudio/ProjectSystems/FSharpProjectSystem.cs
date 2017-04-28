@@ -73,7 +73,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 {
                     await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                    RemoveReferenceCore(name, VsProjectAdapterUtility.GetReferences(VsProjectAdapter));
+                    RemoveReferenceCore(name, VsProjectAdapter.GetReferences());
                 });
         }
 

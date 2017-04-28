@@ -194,7 +194,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 return NuGetUIThreadHelper.JoinableTaskFactory.Run(async delegate
                 {
                     await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                    return VsProjectAdapter.DteProject.Object as VSProject4;
+                    return VsProjectAdapter.Project.Object as VSProject4;
                 });
 #endif
             }
@@ -363,7 +363,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             Debug.Assert(ThreadHelper.CheckAccess());
 
-            VsProjectAdapterUtility.GetReferences(VsProjectAdapter).Add(name);
+            VsProjectAdapter.GetReferences().Add(name);
         }
 
         public virtual void AddImport(string targetFullPath, ImportLocation location)
@@ -418,7 +418,7 @@ namespace NuGet.PackageManagement.VisualStudio
                     assemblyFullPath = Path.Combine(projectFullPath, referencePath);
 
                     // Add a reference to the project
-                    var references = VsProjectAdapterUtility.GetReferences(VsProjectAdapter);
+                    var references = VsProjectAdapter.GetReferences();
 
                     dynamic reference = references.Add(assemblyFullPath);
 
@@ -579,7 +579,7 @@ namespace NuGet.PackageManagement.VisualStudio
                         referenceName = Path.GetFileNameWithoutExtension(name);
                     }
 
-                    return VsProjectAdapterUtility.GetReferences(VsProjectAdapter).Item(referenceName) != null;
+                    return VsProjectAdapter.GetReferences().Item(referenceName) != null;
                 }
                 catch
                 {
@@ -627,7 +627,7 @@ namespace NuGet.PackageManagement.VisualStudio
                     //        almost all the assemblies since Assembly Name is the same as the assembly file name
                     //        In case of F#, the input parameter is case-sensitive as well
                     //        Hence, an override to THIS function is added to take care of that
-                    var reference = VsProjectAdapterUtility.GetReferences(VsProjectAdapter).Item(referenceName);
+                    var reference = VsProjectAdapter.GetReferences().Item(referenceName);
                     if (reference != null)
                     {
                         reference.Remove();
@@ -733,7 +733,7 @@ namespace NuGet.PackageManagement.VisualStudio
             {
                 await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                return VsProjectAdapter.GetPropertyValue(propertyName);
+                return VsProjectAdapter.GetProjectProperty(propertyName);
             });
         }
 
@@ -870,7 +870,7 @@ namespace NuGet.PackageManagement.VisualStudio
         {
             if (ScriptExecutor != null)
             {
-                return ScriptExecutor.ExecuteAsync(identity, packageInstallPath, scriptRelativePath, VsProjectAdapter.DteProject, NuGetProjectContext, throwOnFailure);
+                return ScriptExecutor.ExecuteAsync(identity, packageInstallPath, scriptRelativePath, VsProjectAdapter.Project, NuGetProjectContext, throwOnFailure);
             }
 
             return Task.FromResult(false);

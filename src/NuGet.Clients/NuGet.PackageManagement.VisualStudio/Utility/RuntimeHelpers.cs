@@ -36,7 +36,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
                 // Keep track of visited projects
-                if (vsProjectAdapter.SupportsBindingRedirects())
+                if (vsProjectAdapter.SupportsBindingRedirects)
                 {
                     // Get the dependentEnvDTEProjectsDictionary once here, so that, it is not called for every single project
                     var dependentProjectsDictionary = await vsSolutionManager.GetDependentProjectsDictionaryAsync();
@@ -83,7 +83,7 @@ namespace NuGet.PackageManagement.VisualStudio
                 return;
             }
 
-            if (vsProjectAdapter.SupportsBindingRedirects())
+            if (vsProjectAdapter.SupportsBindingRedirects)
             {
                 await AddBindingRedirectsAsync(vsSolutionManager, vsProjectAdapter, domain, projectAssembliesCache, frameworkMultiTargeting, nuGetProjectContext);
             }

@@ -63,7 +63,7 @@ namespace NuGet.PackageManagement.VisualStudio
             return new VsProjectAdapter(project, projectNames, EnsureProjectIsLoaded, this, _deferredProjectWorkspaceService);
         }
 
-        private EnvDTE.Project EnsureProjectIsLoaded(IVsHierarchy project)
+        public EnvDTE.Project EnsureProjectIsLoaded(IVsHierarchy project)
         {
             return NuGetUIThreadHelper.JoinableTaskFactory.Run(async () =>
             {
@@ -73,7 +73,10 @@ namespace NuGet.PackageManagement.VisualStudio
                 //    we load only the project we need, not the entire solution.
                 var hr = project.GetGuidProperty((uint)VSConstants.VSITEMID.Root, (int)__VSHPROPID.VSHPROPID_ProjectIDGuid, out Guid projectGuid);
                 ErrorHandler.ThrowOnFailure(hr);
-                hr = ((IVsSolution4)_vsSolution).EnsureProjectIsLoaded(projectGuid, (uint)__VSBSLFLAGS.VSBSLFLAGS_None);
+
+                var asVsSolution4 = _vsSolution.Value as IVsSolution4;
+                Assumes.Present(asVsSolution4);
+                hr = asVsSolution4.EnsureProjectIsLoaded(projectGuid, (uint)__VSBSLFLAGS.VSBSLFLAGS_None);
                 ErrorHandler.ThrowOnFailure(hr);
 
                 // 2. After the project is loaded, grab the latest IVsHierarchy object.

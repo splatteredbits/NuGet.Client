@@ -25,7 +25,7 @@ namespace NuGet.VisualStudio
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            return project.DteProject.Kind != null && project.DteProject.Kind.Equals(VsProjectTypes.WebSiteProjectTypeGuid, StringComparison.OrdinalIgnoreCase);
+            return project.Project.Kind != null && project.Project.Kind.Equals(VsProjectTypes.WebSiteProjectTypeGuid, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

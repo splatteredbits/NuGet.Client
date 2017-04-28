@@ -47,7 +47,7 @@ namespace NuGet.PackageManagement.VisualStudio
             await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             await ProjectHelper.DoWorkInWriterLockAsync(
-                VsProjectAdapter.DteProject,
+                VsProjectAdapter.Project,
                 VsProjectAdapter.VsHierarchy,
                 buildProject => MicrosoftBuildEvaluationProjectUtility.AddImportStatement(buildProject, relativeTargetPath, location));
 
@@ -81,7 +81,7 @@ namespace NuGet.PackageManagement.VisualStudio
             await NuGetUIThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             await ProjectHelper.DoWorkInWriterLockAsync(
-                VsProjectAdapter.DteProject,
+                VsProjectAdapter.Project,
                 VsProjectAdapter.VsHierarchy,
                 buildProject => MicrosoftBuildEvaluationProjectUtility.RemoveImportStatement(buildProject, relativeTargetPath));
 

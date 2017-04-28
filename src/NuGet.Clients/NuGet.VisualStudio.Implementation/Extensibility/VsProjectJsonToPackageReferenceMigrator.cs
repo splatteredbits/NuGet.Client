@@ -65,7 +65,7 @@ namespace NuGet.VisualStudio
                 _solutionManager.Value.SaveProject(nuGetProject);
                 
                 var legacyPackageRefBasedProject = new LegacyCSProjPackageReferenceProject(
-                    new EnvDTEProjectAdapter(project.DteProject),
+                    project,
                     project.ProjectId);
                 
                 await ProjectJsonToPackageRefMigrator.MigrateAsync(

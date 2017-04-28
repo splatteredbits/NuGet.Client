@@ -184,7 +184,7 @@ namespace NuGetVSExtension
         private void SolutionManager_NuGetProjectRenamed(object sender, NuGetProjectEventArgs e)
         {
             var project = SolutionManager.GetVsProjectAdapter(SolutionManager.GetNuGetProjectSafeName(e.NuGetProject));
-            var windowFrame = FindExistingWindowFrame(project.DteProject);
+            var windowFrame = FindExistingWindowFrame(project.Project);
             if (windowFrame != null)
             {
                 windowFrame.SetProperty((int)__VSFPROPID.VSFPROPID_OwnerCaption, String.Format(

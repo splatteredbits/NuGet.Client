@@ -34,7 +34,7 @@ namespace NuGet.PackageManagement.VisualStudio
             var folderPath = Path.GetDirectoryName(path);
             var fullPath = FileSystemUtility.GetFullPath(ProjectFullPath, path);
 
-            VCProjectHelper.AddFileToProject(VsProjectAdapter.DteProject.Object, fullPath, folderPath);
+            VCProjectHelper.AddFileToProject(VsProjectAdapter.Project.Object, fullPath, folderPath);
 
             NuGetProjectContext.Log(ProjectManagement.MessageLevel.Debug, Strings.Debug_AddedFileToProject, path, ProjectName);
         }
@@ -61,7 +61,7 @@ namespace NuGet.PackageManagement.VisualStudio
             var fullPath = FileSystemUtility.GetFullPath(ProjectFullPath, path);
 
             bool succeeded;
-            succeeded = VCProjectHelper.RemoveFileFromProject(VsProjectAdapter.DteProject.Object, fullPath, folderPath);
+            succeeded = VCProjectHelper.RemoveFileFromProject(VsProjectAdapter.Project.Object, fullPath, folderPath);
             if (succeeded)
             {
                 // The RemoveFileFromProject() method only removes file from project.
