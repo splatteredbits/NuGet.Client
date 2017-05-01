@@ -100,7 +100,7 @@ namespace NuGet.PackageManagement.VisualStudio
 
             var projectNames = vsProject.ProjectNames;
             var fullProjectPath = vsProject.FullProjectPath;
-            var unconfiguredProject = vsProject.GetUnconfiguredProject();
+            var unconfiguredProject = GetUnconfiguredProject(vsProject.Project);
 
             result = new CpsPackageReferenceProject(
                 vsProject.ProjectName,
@@ -112,6 +112,17 @@ namespace NuGet.PackageManagement.VisualStudio
                 vsProject.ProjectId);
 
             return true;
+        }
+
+        private static UnconfiguredProject GetUnconfiguredProject(EnvDTE.Project project)
+        {
+            var context = project as IVsBrowseObjectContext;
+            if (context == null)
+            {
+                // VC implements this on their DTE.Project.Object
+                context = project.Object as IVsBrowseObjectContext;
+            }
+            return context?.UnconfiguredProject;
         }
     }
 }

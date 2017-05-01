@@ -4,7 +4,6 @@
 using System.Collections.Generic;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
-using Microsoft.VisualStudio.ProjectSystem;
 using Microsoft.VisualStudio.Shell.Interop;
 using NuGet.Common;
 using NuGet.Frameworks;
@@ -103,8 +102,6 @@ namespace NuGet.VisualStudio
         NuGetFramework GetTargetFramework();
 
         Task<NuGetFramework> GetTargetFrameworkAsync();
-
-        UnconfiguredProject GetUnconfiguredProject();
 
         Task<bool> ContainsFile(string path);
 
