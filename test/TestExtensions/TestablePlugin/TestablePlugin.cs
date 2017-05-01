@@ -61,17 +61,17 @@ namespace NuGet.Test.TestExtensions.TestablePlugin
             return handlers;
         }
 
-        public Task HandleCancelAsync(Message message, CancellationToken cancellationToken)
+        public Task HandleCancelAsync(IConnection connection, Message message, CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }
 
-        public Task HandleProgressAsync(Message message, CancellationToken cancellationToken)
+        public Task HandleProgressAsync(IConnection connection, Message message, CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }
 
-        public async Task HandleResponseAsync(Message message, IResponseHandler responseHandler, CancellationToken cancellationToken)
+        public async Task HandleResponseAsync(IConnection connection, Message message, IResponseHandler responseHandler, CancellationToken cancellationToken)
         {
             var response = _responses.Take();
 

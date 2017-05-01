@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Configuration;
@@ -47,7 +48,7 @@ namespace NuGet.Credentials
             {
                 throw new ArgumentNullException(nameof(providers));
             }
-            
+
             _nonInteractive = nonInteractive;
             Providers = new List<ICredentialProvider>(providers);
             HandlesDefaultCredentials = Providers.Any(provider => provider is DefaultCredentialsCredentialProvider);
@@ -145,6 +146,29 @@ namespace NuGet.Credentials
             return creds;
         }
 
+        public bool TryGetLastKnownGoodCredentialsFromCache(
+            Uri uri,
+            bool isProxy,
+            out ICredentials credentials)
+        {
+            credentials = null;
+
+            var rootUri = GetRootUri(uri);
+            var ending = $"_{isProxy}_{rootUri}";
+
+            foreach (var entry in _providerCredentialCache)
+            {
+                if (entry.Key.EndsWith(ending) && entry.Value.Status == CredentialStatus.Success)
+                {
+                    credentials = entry.Value.Credentials;
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// Gets the currently configured providers.
         /// </summary>
@@ -179,8 +203,13 @@ namespace NuGet.Credentials
 
         private static string CredentialCacheKey(Uri uri, CredentialRequestType type, ICredentialProvider provider)
         {
-            var rootUri =new Uri(uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.SafeUnescaped));
+            var rootUri = GetRootUri(uri);
             return GetUriKey(rootUri, type, provider);
+        }
+
+        private static Uri GetRootUri(Uri uri)
+        {
+            return new Uri(uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.SafeUnescaped));
         }
 
         private static string GetUriKey(Uri uri, CredentialRequestType type, ICredentialProvider provider)

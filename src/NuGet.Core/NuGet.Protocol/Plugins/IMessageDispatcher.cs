@@ -18,6 +18,11 @@ namespace NuGet.Protocol.Plugins
         /// </summary>
         IRequestHandlers RequestHandlers { get; }
 
+        Message CreateMessage(MessageType type, MessageMethod method);
+
+        Message CreateMessage<TPayload>(MessageType type, MessageMethod method, TPayload payload)
+            where TPayload : class;
+
         /// <summary>
         /// Asynchronously dispatches a cancellation request for the specified request.
         /// </summary>

@@ -290,7 +290,7 @@ namespace Commands.Test
                 var packageDir = pathResolver.GetInstallPath(package.Id, identity.Version);
                 Assert.False(Directory.Exists(packageDir), packageDir + " exist");
 
-                string filePathToLock = Path.Combine(packageDir, "lib", "net40", "two.dll");
+                var filePathToLock = Path.Combine(packageDir, "lib", "net40", "two.dll");
 
                 // Act
                 using (var stream = package.File.OpenRead())
@@ -300,7 +300,7 @@ namespace Commands.Test
                     Func<CancellationToken, Task<bool>> action = (ct) => {
                         Assert.ThrowsAnyAsync<IOException>(async () =>
                             await PackageExtractor.InstallFromSourceAsync(
-                                str => stream.CopyToAsync(stream, bufferSize: 8192, cancellationToken: token),
+                                (Stream str) => stream.CopyToAsync(stream, bufferSize: 8192, cancellationToken: token),
                                 versionFolderPathContext,
                            token));
 

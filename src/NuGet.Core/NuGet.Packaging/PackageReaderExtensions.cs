@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using NuGet.Packaging.Core;
 
 namespace NuGet.Packaging
@@ -16,6 +18,13 @@ namespace NuGet.Packaging
             return packageReader
                 .GetFiles()
                 .Where(file => PackageHelper.IsPackageFile(file, packageSaveMode));
+        }
+
+        public static async Task<IEnumerable<string>> GetPackageFilesAsync(this PackageReaderBase packageReader, PackageSaveMode packageSaveMode, CancellationToken cancellationToken)
+        {
+            var files = await packageReader.GetFilesAsync(cancellationToken);
+
+            return files.Where(file => PackageHelper.IsPackageFile(file, packageSaveMode));
         }
 
         public static IEnumerable<string> GetSatelliteFiles(this IPackageContentReader packageReader, string packageLanguage)

@@ -39,6 +39,11 @@ namespace NuGet.Protocol.Core.Types
             ILogger logger,
             CancellationToken token);
 
+        public virtual Task<bool> CanCopyToStreamAsync(CancellationToken token)
+        {
+            return Task.FromResult(true);
+        }
+
         public abstract Task<bool> CopyNupkgToStreamAsync(
             string id,
             NuGetVersion version,
@@ -46,6 +51,14 @@ namespace NuGet.Protocol.Core.Types
             SourceCacheContext cacheContext,
             ILogger logger,
             CancellationToken token);
+
+        public abstract Task CopyPackageAsync(
+            string name,
+            NuGetVersion version,
+            VersionFolderPathContext versionFolderPathContext,
+            SourceCacheContext cacheContext,
+            ILogger logger,
+            CancellationToken none);
 
         /// <summary>
         /// Read dependency info from a nuspec.

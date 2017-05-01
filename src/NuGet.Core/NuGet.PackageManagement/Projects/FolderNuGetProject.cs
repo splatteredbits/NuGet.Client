@@ -24,7 +24,7 @@ namespace NuGet.ProjectManagement
     {
         public string Root { get; set; }
         private PackagePathResolver PackagePathResolver { get; }
-        
+
         public FolderNuGetProject(string root)
             : this(root, new PackagePathResolver(root))
         {
@@ -73,7 +73,8 @@ namespace NuGet.ProjectManagement
                 throw new ArgumentNullException(nameof(nuGetProjectContext));
             }
 
-            if (!downloadResourceResult.PackageStream.CanSeek)
+            if (downloadResourceResult.Status == DownloadResourceResultStatus.Available &&
+                !downloadResourceResult.PackageStream.CanSeek)
             {
                 throw new ArgumentException(Strings.PackageStreamShouldBeSeekable);
             }
@@ -82,7 +83,7 @@ namespace NuGet.ProjectManagement
 
             return ConcurrencyUtilities.ExecuteWithFileLockedAsync(
                 packageDirectory,
-                action: cancellationToken =>
+                action: async (cancellationToken) =>
                 {
                     // 1. Set a default package extraction context, if necessary.
                     PackageExtractionContext packageExtractionContext = nuGetProjectContext.PackageExtractionContext;
@@ -95,24 +96,39 @@ namespace NuGet.ProjectManagement
                     if (PackageExists(packageIdentity, packageExtractionContext.PackageSaveMode))
                     {
                         nuGetProjectContext.Log(MessageLevel.Info, Strings.PackageAlreadyExistsInFolder, packageIdentity, Root);
-                        return Task.FromResult(false);
+                        return false;
                     }
 
                     nuGetProjectContext.Log(MessageLevel.Info, Strings.AddingPackageToFolder, packageIdentity, Path.GetFullPath(Root));
 
                     // 3. Call PackageExtractor to extract the package into the root directory of this FileSystemNuGetProject
-                    downloadResourceResult.PackageStream.Seek(0, SeekOrigin.Begin);
+                    if (downloadResourceResult.Status == DownloadResourceResultStatus.Available)
+                    {
+                        downloadResourceResult.PackageStream.Seek(0, SeekOrigin.Begin);
+                    }
                     var addedPackageFilesList = new List<string>();
-                    
+
                     if (downloadResourceResult.PackageReader != null)
                     {
-                        addedPackageFilesList.AddRange(
-                            PackageExtractor.ExtractPackage(
-                                downloadResourceResult.PackageReader,
-                                downloadResourceResult.PackageStream,
-                                PackagePathResolver,
-                                packageExtractionContext,
-                                cancellationToken));
+                        if (downloadResourceResult.Status == DownloadResourceResultStatus.AvailableWithoutStream)
+                        {
+                            addedPackageFilesList.AddRange(
+                                await PackageExtractor.ExtractPackageAsync(
+                                    downloadResourceResult.PackageReader,
+                                    PackagePathResolver,
+                                    packageExtractionContext,
+                                    cancellationToken));
+                        }
+                        else
+                        {
+                            addedPackageFilesList.AddRange(
+                                PackageExtractor.ExtractPackage(
+                                    downloadResourceResult.PackageReader,
+                                    downloadResourceResult.PackageStream,
+                                    PackagePathResolver,
+                                    packageExtractionContext,
+                                    cancellationToken));
+                        }
                     }
                     else
                     {
@@ -146,7 +162,7 @@ namespace NuGet.ProjectManagement
                         nuGetProjectContext.Log(MessageLevel.Debug, Strings.AddedPackageToFolderFromSource, packageIdentity, Path.GetFullPath(Root), downloadResourceResult.PackageSource);
                     }
 
-                    return Task.FromResult(true);
+                    return true;
                 },
                 token: token);
         }
@@ -172,13 +188,13 @@ namespace NuGet.ProjectManagement
 
             // A package must have either a nupkg or a nuspec to be valid
             var result = packageExists || manifestExists;
-            
+
             // Verify nupkg present if specified
             if ((packageSaveMode & PackageSaveMode.Nupkg) == PackageSaveMode.Nupkg)
             {
                 result &= packageExists;
             }
-            
+
             // Verify nuspec present if specified
             if ((packageSaveMode & PackageSaveMode.Nuspec) == PackageSaveMode.Nuspec)
             {

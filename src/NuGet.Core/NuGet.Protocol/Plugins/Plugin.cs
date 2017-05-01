@@ -101,7 +101,7 @@ namespace NuGet.Protocol.Plugins
             _idleTimerLock = new object();
             _idleTimeout = idleTimeout;
 
-            if (idleTimeout != Timeout.InfiniteTimeSpan)
+            if (idleTimeout != Timeout.InfiniteTimeSpan && !PluginUtilities.IsDebuggingPlugin())
             {
                 _idleTimer = new Timer(OnIdleTimer, state: null, dueTime: idleTimeout, period: Timeout.InfiniteTimeSpan);
             }

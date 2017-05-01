@@ -20,5 +20,10 @@ namespace NuGet.Protocol.Plugins
         /// Default command-line arguments for plugins.
         /// </summary>
         public static readonly IEnumerable<string> PluginArguments = new[] { "-Plugin" };
+
+        /// <summary>
+        /// Default shutdown timeout for plugins.
+        /// </summary>
+        public static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(3);
     }
 }

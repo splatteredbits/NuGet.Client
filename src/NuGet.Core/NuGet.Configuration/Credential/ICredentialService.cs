@@ -17,6 +17,11 @@ namespace NuGet.Configuration
             string message,
             CancellationToken cancellationToken);
 
+        bool TryGetLastKnownGoodCredentialsFromCache(
+            Uri uri,
+            bool isProxy,
+            out ICredentials credentials);
+
         /// <summary>
         /// Gets a value indicating whether this credential service wants to handle "default credentials" specially,
         /// instead of relying on DefaultNetworkCredentials

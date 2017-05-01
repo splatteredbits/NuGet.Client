@@ -12,6 +12,7 @@ using NuGet.Configuration;
 using NuGet.DependencyResolver.Tests;
 using NuGet.Frameworks;
 using NuGet.LibraryModel;
+using NuGet.Packaging;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 using Xunit;
@@ -119,6 +120,11 @@ namespace NuGet.DependencyResolver.Core.Tests
 
             public PackageSource Source => new PackageSource("Test");
 
+            public Task<bool> CanCopyToStreamAsync(CancellationToken cancellationToken)
+            {
+                return Task.FromResult(true);
+            }
+
             public Task CopyToAsync(
                 LibraryIdentity match,
                 Stream stream,
@@ -127,6 +133,16 @@ namespace NuGet.DependencyResolver.Core.Tests
                 CancellationToken cancellationToken)
             {
                 throw new NotImplementedException();
+            }
+
+            public Task CopyToAsync(
+                LibraryIdentity match,
+                VersionFolderPathContext versionFolderPathContext,
+                SourceCacheContext cacheContext,
+                ILogger logger,
+                CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException();
             }
 
             public async Task<LibraryIdentity> FindLibraryAsync(

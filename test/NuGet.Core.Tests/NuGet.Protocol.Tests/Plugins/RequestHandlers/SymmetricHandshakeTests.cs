@@ -159,7 +159,7 @@ namespace NuGet.Protocol.Plugins.Tests
             using (var handshake = CreateHandshake())
             {
                 await Assert.ThrowsAsync<ProtocolException>(
-                    () => handshake.HandleCancelAsync(request: null, cancellationToken: CancellationToken.None));
+                    () => handshake.HandleCancelAsync(Mock.Of<IConnection>(), request: null, cancellationToken: CancellationToken.None));
             }
         }
 
@@ -169,7 +169,7 @@ namespace NuGet.Protocol.Plugins.Tests
             using (var handshake = CreateHandshake())
             {
                 await Assert.ThrowsAsync<ProtocolException>(
-                    () => handshake.HandleProgressAsync(request: null, cancellationToken: CancellationToken.None));
+                    () => handshake.HandleProgressAsync(Mock.Of<IConnection>(), request: null, cancellationToken: CancellationToken.None));
             }
         }
 
@@ -180,6 +180,7 @@ namespace NuGet.Protocol.Plugins.Tests
             {
                 var exception = await Assert.ThrowsAsync<ArgumentNullException>(
                     () => handshake.HandleResponseAsync(
+                        Mock.Of<IConnection>(),
                         request: null,
                         responseHandler: Mock.Of<IResponseHandler>(),
                         cancellationToken: CancellationToken.None));
@@ -195,6 +196,7 @@ namespace NuGet.Protocol.Plugins.Tests
             {
                 var exception = await Assert.ThrowsAsync<ArgumentNullException>(
                     () => handshake.HandleResponseAsync(
+                        Mock.Of<IConnection>(),
                         new Message(requestId: "a", type: MessageType.Request, method: MessageMethod.Handshake),
                         responseHandler: null,
                         cancellationToken: CancellationToken.None));
@@ -210,6 +212,7 @@ namespace NuGet.Protocol.Plugins.Tests
             {
                 await Assert.ThrowsAsync<OperationCanceledException>(
                     () => handshake.HandleResponseAsync(
+                        Mock.Of<IConnection>(),
                         new Message(requestId: "a", type: MessageType.Request, method: MessageMethod.Initialize),
                         Mock.Of<IResponseHandler>(),
                         new CancellationToken(canceled: true)));
@@ -257,6 +260,7 @@ namespace NuGet.Protocol.Plugins.Tests
                     payload: JsonSerializationUtilities.FromObject(request));
 
                 await handshake.HandleResponseAsync(
+                    Mock.Of<IConnection>(),
                     inboundMessage,
                     responseHandler.Object,
                     CancellationToken.None);

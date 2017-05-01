@@ -13,10 +13,24 @@ namespace NuGet.Protocol.Plugins
         /// </summary>
         None,
 
+        Close,
+
+        CopyPackageFiles,
+
+        DownloadPackage,
+
+        GetCredential,
+
+        GetFileInPackage,
+
+        GetFilesInPackage,
+
         /// <summary>
         /// Get operation claims
         /// </summary>
         GetOperationClaims,
+
+        GetPackageVersions,
 
         /// <summary>
         /// Handshake
@@ -31,6 +45,10 @@ namespace NuGet.Protocol.Plugins
         /// <summary>
         /// Log
         /// </summary>
-        Log
+        Log,
+
+        PrefetchPackage,
+        SetPackageSourceCredentials,
+        Shutdown
     }
 }

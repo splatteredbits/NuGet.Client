@@ -69,6 +69,21 @@ namespace NuGet.Protocol.Plugins
             _isDisposed = true;
         }
 
+        public Message CreateMessage(MessageType type, MessageMethod method)
+        {
+            var requestId = _idGenerator.GenerateUniqueId();
+
+            return MessageUtilities.Create(requestId, type, method);
+        }
+
+        public Message CreateMessage<TPayload>(MessageType type, MessageMethod method, TPayload payload)
+            where TPayload : class
+        {
+            var requestId = _idGenerator.GenerateUniqueId();
+
+            return MessageUtilities.Create(requestId, type, method, payload);
+        }
+
         /// <summary>
         /// Asynchronously dispatches a cancellation request for the specified request.
         /// </summary>
@@ -217,21 +232,6 @@ namespace NuGet.Protocol.Plugins
             CancellationToken cancellationToken)
         {
             return DispatchResponseAsync(request, payload, cancellationToken);
-        }
-
-        private Message CreateMessage(MessageType type, MessageMethod method)
-        {
-            var requestId = _idGenerator.GenerateUniqueId();
-
-            return new Message(requestId, type, method);
-        }
-
-        private Message CreateMessage<TPayload>(MessageType type, MessageMethod method, TPayload payload)
-            where TPayload : class
-        {
-            var requestId = _idGenerator.GenerateUniqueId();
-
-            return MessageUtilities.Create(requestId, type, method, payload);
         }
 
         private async Task DispatchAsync<TOutgoing>(
@@ -476,16 +476,74 @@ namespace NuGet.Protocol.Plugins
 
         private void HandleInboundRequest(IConnection connection, Message message)
         {
-            var requestHandler = GetInboundRequestHandler(message.Method);
-            var requestContext = CreateRequestContext<HandshakeResponse>(
-                message,
-                connection.Options.HandshakeTimeout,
-                isKeepAlive: false,
-                cancellationToken: requestHandler.CancellationToken);
+            var cancellationToken = CancellationToken.None;
+            IRequestHandler requestHandler = null;
+            ProtocolException exception = null;
 
-            _requestContexts.TryAdd(message.RequestId, requestContext);
+            try
+            {
+                requestHandler = GetInboundRequestHandler(message.Method);
+                cancellationToken = requestHandler.CancellationToken;
+            }
+            catch (ProtocolException ex)
+            {
+                exception = ex;
+            }
 
-            requestContext.BeginResponseAsync(message, requestHandler, this);
+            RequestContext requestContext = null;
+
+            switch (message.Method)
+            {
+                case MessageMethod.CopyPackageFiles:
+                    requestContext = CreateRequestContext<CopyPackageFilesResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.DownloadPackage:
+                    requestContext = CreateRequestContext<CopyPackageFilesResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.GetCredential:
+                    requestContext = CreateRequestContext<GetCredentialResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.GetFileInPackage:
+                    requestContext = CreateRequestContext<GetFileInPackageResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.GetFilesInPackage:
+                    requestContext = CreateRequestContext<GetFilesInPackageResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.GetOperationClaims:
+                    requestContext = CreateRequestContext<GetOperationClaimsResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.GetPackageVersions:
+                    requestContext = CreateRequestContext<GetPackageVersionsResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.Handshake:
+                    requestContext = CreateRequestContext<HandshakeResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.Initialize:
+                    requestContext = CreateRequestContext<InitializeResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.Log:
+                    requestContext = CreateRequestContext<LogResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.PrefetchPackage:
+                    requestContext = CreateRequestContext<PrefetchPackageResponse>(message, cancellationToken);
+                    break;
+                case MessageMethod.SetPackageSourceCredentials:
+                    requestContext = CreateRequestContext<SetCredentialsResponse>(message, cancellationToken);
+                    break;
+                default:
+                    throw new ProtocolException("Unexpected message method.");
+            }
+
+            if (exception == null && requestHandler != null)
+            {
+                _requestContexts.TryAdd(message.RequestId, requestContext);
+
+                requestContext.BeginResponseAsync(message, requestHandler, this);
+            }
+            else
+            {
+                requestContext.BeginFaultAsync(connection, message, exception);
+            }
         }
 
         private void HandleInboundProgress(Message message)
@@ -529,13 +587,26 @@ namespace NuGet.Protocol.Plugins
             _requestContexts.TryRemove(requestId, out requestContext);
         }
 
-        private static RequestContext<TOutgoing> CreateRequestContext<TOutgoing>(
+        private RequestContext<TOutgoing> CreateRequestContext<TOutgoing>(
+            Message message,
+            CancellationToken cancellationToken)
+        {
+            return new RequestContext<TOutgoing>(
+                _connection,
+                message.RequestId,
+                _connection.Options.RequestTimeout,
+                isKeepAlive: true,
+                cancellationToken: cancellationToken);
+        }
+
+        private RequestContext<TOutgoing> CreateRequestContext<TOutgoing>(
             Message message,
             TimeSpan? timeout,
             bool isKeepAlive,
             CancellationToken cancellationToken)
         {
             return new RequestContext<TOutgoing>(
+                _connection,
                 message.RequestId,
                 timeout,
                 isKeepAlive,
@@ -586,6 +657,7 @@ namespace NuGet.Protocol.Plugins
                 IRequestHandler requestHandler,
                 IResponseHandler responseHandler);
             public abstract void HandleResponse(Message message);
+            public abstract void BeginFaultAsync(IConnection connection, Message message, Exception ex);
             public abstract void HandleFault(Message message);
             public abstract void HandleCancel();
         }
@@ -594,6 +666,7 @@ namespace NuGet.Protocol.Plugins
         {
             private readonly CancellationTokenSource _timeoutCancellationTokenSource;
             private readonly CancellationTokenSource _combinedCancellationTokenSource;
+            private readonly IConnection _connection;
             private bool _isDisposed;
             private bool _isKeepAlive;
             private readonly TimeSpan? _timeout;
@@ -603,12 +676,14 @@ namespace NuGet.Protocol.Plugins
             internal Task<TResult> CompletionTask => _taskCompletionSource.Task;
 
             internal RequestContext(
+                IConnection connection,
                 string requestId,
                 TimeSpan? timeout,
                 bool isKeepAlive,
                 CancellationToken cancellationToken)
                 : base(requestId)
             {
+                _connection = connection;
                 _taskCompletionSource = new TaskCompletionSource<TResult>();
                 _timeout = timeout;
                 _isKeepAlive = isKeepAlive;
@@ -630,9 +705,11 @@ namespace NuGet.Protocol.Plugins
 
             public override void BeginProgressAsync(Message message, IRequestHandler requestHandler)
             {
-                Task.Factory.StartNew(
-                    () => requestHandler.HandleProgressAsync(message, _combinedCancellationTokenSource.Token),
-                        _combinedCancellationTokenSource.Token);
+                Task.Run(() => requestHandler.HandleProgressAsync(
+                        _connection,
+                        message,
+                        _combinedCancellationTokenSource.Token),
+                    _combinedCancellationTokenSource.Token);
             }
 
             public override void HandleProgress(Message message)
@@ -650,12 +727,12 @@ namespace NuGet.Protocol.Plugins
                 IRequestHandler requestHandler,
                 IResponseHandler responseHandler)
             {
-                _responseTask = Task.Factory.StartNew(
-                    () => requestHandler.HandleResponseAsync(
-                            message,
-                            responseHandler,
-                            _combinedCancellationTokenSource.Token),
-                        _combinedCancellationTokenSource.Token);
+                _responseTask = Task.Run(() => requestHandler.HandleResponseAsync(
+                        _connection,
+                        message,
+                        responseHandler,
+                        _combinedCancellationTokenSource.Token),
+                    _combinedCancellationTokenSource.Token);
             }
 
             public override void HandleResponse(Message message)
@@ -672,8 +749,26 @@ namespace NuGet.Protocol.Plugins
                 }
             }
 
+            public override void BeginFaultAsync(IConnection connection, Message message, Exception ex)
+            {
+                var responsePayload = new Fault(ex.Message);
+                var response = new Message(
+                    message.RequestId,
+                    MessageType.Fault,
+                    message.Method,
+                    JsonSerializationUtilities.FromObject(responsePayload));
+
+                _responseTask = Task.Run(() => connection.SendAsync(
+                        response,
+                        _combinedCancellationTokenSource.Token),
+                    _combinedCancellationTokenSource.Token);
+            }
+
             public override void HandleFault(Message message)
             {
+                var fault = MessageUtilities.DeserializePayload<Fault>(message);
+
+                throw new ProtocolException(fault.Message);
             }
 
             public override void HandleCancel()

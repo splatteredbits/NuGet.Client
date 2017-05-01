@@ -148,12 +148,40 @@ namespace NuGet.Commands
             else
             {
                 // Otherwise, get it from the provider.
-                await remoteMatch.Provider.CopyToAsync(
-                    remoteMatch.Library,
-                    destination,
-                    _request.CacheContext,
-                    _request.Log,
-                    token);
+                var packageIdentity = new PackageIdentity(remoteMatch.Library.Name, remoteMatch.Library.Version);
+                var versionFolderPathContext = new VersionFolderPathContext(
+                     packageIdentity,
+                     _request.PackagesDirectory,
+                     _request.Log,
+                     _request.PackageSaveMode,
+                     _request.XmlDocFileSaveMode);
+
+                var canCopyToStream = await remoteMatch.Provider.CanCopyToStreamAsync(token);
+
+                if (canCopyToStream)
+                {
+                    await PackageExtractor.InstallFromSourceAsync(
+                        (Stream stream) => remoteMatch.Provider.CopyToAsync(
+                            remoteMatch.Library,
+                            stream,
+                            _request.CacheContext,
+                            _request.Log,
+                            token),
+                        versionFolderPathContext,
+                        token);
+                }
+                else
+                {
+                    await PackageExtractor.InstallFromSourceAsync(
+                        (VersionFolderPathContext context) => remoteMatch.Provider.CopyToAsync(
+                            remoteMatch.Library,
+                            context,
+                            _request.CacheContext,
+                            _request.Log,
+                            token),
+                        versionFolderPathContext,
+                        token);
+                }
             }
         }
     }

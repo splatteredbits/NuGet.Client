@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using NuGet.Common;
 using NuGet.Configuration;
+using NuGet.Packaging;
 using NuGet.Packaging.Core;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
@@ -103,6 +104,17 @@ namespace NuGet.Protocol
                 cacheContext,
                 logger,
                 token);
+        }
+
+        public override Task CopyPackageAsync(
+            string name,
+            NuGetVersion version,
+            VersionFolderPathContext versionFolderPathContext,
+            SourceCacheContext cacheContext,
+            ILogger logger,
+            CancellationToken none)
+        {
+            throw new NotSupportedException();
         }
 
         private async Task<PackageInfo> GetPackageInfoAsync(

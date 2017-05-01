@@ -74,6 +74,17 @@ namespace NuGet.Protocol
             return false;
         }
 
+        public override Task CopyPackageAsync(
+            string name,
+            NuGetVersion version,
+            VersionFolderPathContext versionFolderPathContext,
+            SourceCacheContext cacheContext,
+            ILogger logger,
+            CancellationToken none)
+        {
+            throw new NotSupportedException();
+        }
+
         public override Task<FindPackageByIdDependencyInfo> GetDependencyInfoAsync(
             string id,
             NuGetVersion version,

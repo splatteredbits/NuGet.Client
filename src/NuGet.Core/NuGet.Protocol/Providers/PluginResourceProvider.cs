@@ -51,7 +51,7 @@ namespace NuGet.Protocol.Core.Types
             PluginResource resource = null;
 
             // Fast path
-            if (IsPluginPossiblyAvailable())
+            if (source.PackageSource.IsHttp && IsPluginPossiblyAvailable())
             {
                 var serviceIndex = await source.GetResourceAsync<ServiceIndexResourceV3>(cancellationToken);
 
@@ -67,7 +67,7 @@ namespace NuGet.Protocol.Core.Types
 
                     if (pluginCreationResults.Any())
                     {
-                        resource = new PluginResource(pluginCreationResults);
+                        resource = new PluginResource(pluginCreationResults, source.PackageSource);
                     }
                 }
             }

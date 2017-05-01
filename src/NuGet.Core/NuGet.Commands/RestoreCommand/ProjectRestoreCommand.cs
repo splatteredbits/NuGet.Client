@@ -263,15 +263,32 @@ namespace NuGet.Commands
                 _request.PackageSaveMode,
                 _request.XmlDocFileSaveMode);
 
-            await PackageExtractor.InstallFromSourceAsync(
-                stream => installItem.Provider.CopyToAsync(
-                    installItem.Library,
-                    stream,
-                    _request.CacheContext,
-                    _logger,
-                    token),
-                versionFolderPathContext,
-                token);
+            var canCopyToStream = await installItem.Provider.CanCopyToStreamAsync(token);
+
+            if (canCopyToStream)
+            {
+                await PackageExtractor.InstallFromSourceAsync(
+                    (Stream stream) => installItem.Provider.CopyToAsync(
+                        installItem.Library,
+                        stream,
+                        _request.CacheContext,
+                        _logger,
+                        token),
+                    versionFolderPathContext,
+                    token);
+            }
+            else
+            {
+                await PackageExtractor.InstallFromSourceAsync(
+                    (VersionFolderPathContext context) => installItem.Provider.CopyToAsync(
+                        installItem.Library,
+                        context,
+                        _request.CacheContext,
+                        _logger,
+                        token),
+                    versionFolderPathContext,
+                    token);
+            }
         }
 
         private void CheckDependencies(RestoreTargetGraph result, IEnumerable<LibraryDependency> dependencies)

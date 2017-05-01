@@ -49,7 +49,7 @@ namespace NuGet.Protocol.Plugins.Tests
                 method: MessageMethod.Log);
 
             await Assert.ThrowsAsync<NotSupportedException>(
-                () => handler.HandleCancelAsync(request, CancellationToken.None));
+                () => handler.HandleCancelAsync(Mock.Of<IConnection>(), request, CancellationToken.None));
         }
 
         [Fact]
@@ -62,7 +62,7 @@ namespace NuGet.Protocol.Plugins.Tests
                 method: MessageMethod.Log);
 
             await Assert.ThrowsAsync<NotSupportedException>(
-                () => handler.HandleProgressAsync(request, CancellationToken.None));
+                () => handler.HandleProgressAsync(Mock.Of<IConnection>(), request, CancellationToken.None));
         }
 
         [Fact]
@@ -72,6 +72,7 @@ namespace NuGet.Protocol.Plugins.Tests
 
             var exception = await Assert.ThrowsAsync<ArgumentNullException>(
                 () => handler.HandleResponseAsync(
+                    Mock.Of<IConnection>(),
                     request: null,
                     responseHandler: Mock.Of<IResponseHandler>(),
                     cancellationToken: CancellationToken.None));
@@ -90,6 +91,7 @@ namespace NuGet.Protocol.Plugins.Tests
 
             var exception = await Assert.ThrowsAsync<ArgumentNullException>(
                 () => handler.HandleResponseAsync(
+                    Mock.Of<IConnection>(),
                     request,
                     responseHandler: null,
                     cancellationToken: CancellationToken.None));
@@ -108,6 +110,7 @@ namespace NuGet.Protocol.Plugins.Tests
 
             await Assert.ThrowsAsync<OperationCanceledException>(
                 () => handler.HandleResponseAsync(
+                    Mock.Of<IConnection>(),
                     request,
                     Mock.Of<IResponseHandler>(),
                     new CancellationToken(canceled: true)));
@@ -217,7 +220,11 @@ namespace NuGet.Protocol.Plugins.Tests
                 _logger.Setup(expression);
             }
 
-            await handler.HandleResponseAsync(request, _responseHandler.Object, CancellationToken.None);
+            await handler.HandleResponseAsync(
+                Mock.Of<IConnection>(),
+                request,
+                _responseHandler.Object,
+                CancellationToken.None);
 
             if (expressionFunc == null)
             {

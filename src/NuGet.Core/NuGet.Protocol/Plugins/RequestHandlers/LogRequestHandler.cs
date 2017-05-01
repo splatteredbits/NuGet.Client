@@ -46,7 +46,7 @@ namespace NuGet.Protocol.Plugins
         /// <returns>A task that represents the asynchronous operation.</returns>
         /// <exception cref="NotSupportedException">Cancellation requests are not supported
         /// by this request handler.</exception>
-        public Task HandleCancelAsync(Message request, CancellationToken cancellationToken)
+        public Task HandleCancelAsync(IConnection connection, Message request, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }
@@ -59,7 +59,7 @@ namespace NuGet.Protocol.Plugins
         /// <returns>A task that represents the asynchronous operation.</returns>
         /// <exception cref="NotSupportedException">Progress requests are not supported
         /// by this request handler.</exception>
-        public Task HandleProgressAsync(Message request, CancellationToken cancellationToken)
+        public Task HandleProgressAsync(IConnection connection, Message request, CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }
@@ -76,7 +76,7 @@ namespace NuGet.Protocol.Plugins
         /// is <c>null</c>.</exception>
         /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken" />
         /// is cancelled.</exception>
-        public async Task HandleResponseAsync(Message request, IResponseHandler responseHandler, CancellationToken cancellationToken)
+        public async Task HandleResponseAsync(IConnection connection, Message request, IResponseHandler responseHandler, CancellationToken cancellationToken)
         {
             if (request == null)
             {

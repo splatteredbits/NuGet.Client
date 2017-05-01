@@ -115,11 +115,25 @@ namespace NuGet.Protocol.Plugins
         /// <returns>A <see cref="ConnectionOptions" />.</returns>
         public static ConnectionOptions CreateDefault()
         {
+            TimeSpan handshakeTimeout;
+            TimeSpan requestTimeout;
+
+            if (PluginUtilities.IsDebuggingPlugin())
+            {
+                handshakeTimeout = ProtocolConstants.MaxTimeout;
+                requestTimeout = ProtocolConstants.MaxTimeout;
+            }
+            else
+            {
+                handshakeTimeout = ProtocolConstants.HandshakeTimeout;
+                requestTimeout = ProtocolConstants.RequestTimeout;
+            }
+
             return new ConnectionOptions(
                 protocolVersion: ProtocolConstants.CurrentVersion,
                 minimumProtocolVersion: ProtocolConstants.CurrentVersion,
-                handshakeTimeout: ProtocolConstants.HandshakeTimeout,
-                requestTimeout: ProtocolConstants.RequestTimeout);
+                handshakeTimeout: handshakeTimeout,
+                requestTimeout: requestTimeout);
         }
     }
 }

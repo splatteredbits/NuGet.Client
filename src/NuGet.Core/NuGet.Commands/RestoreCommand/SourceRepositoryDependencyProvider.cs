@@ -1,6 +1,7 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -201,6 +202,15 @@ namespace NuGet.Commands
             }
         }
 
+        public async Task<bool> CanCopyToStreamAsync(CancellationToken cancellationToken)
+        {
+            await EnsureResource();
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return await _findPackagesByIdResource.CanCopyToStreamAsync(cancellationToken);
+        }
+
         public async Task CopyToAsync(
             LibraryIdentity identity,
             Stream stream,
@@ -225,6 +235,47 @@ namespace NuGet.Commands
                     identity.Name,
                     identity.Version,
                     stream,
+                    cacheContext,
+                    logger,
+                    CancellationToken.None);
+            }
+            catch (FatalProtocolException e) when (_ignoreFailedSources)
+            {
+                if (!_ignoreWarning)
+                {
+                    _logger.LogWarning(e.Message);
+                }
+            }
+            finally
+            {
+                _throttle?.Release();
+            }
+        }
+
+        public async Task CopyToAsync(
+            LibraryIdentity identity,
+            VersionFolderPathContext versionFolderPathContext,
+            SourceCacheContext cacheContext,
+            ILogger logger,
+            CancellationToken cancellationToken)
+        {
+            await EnsureResource();
+
+            try
+            {
+                if (_throttle != null)
+                {
+                    await _throttle.WaitAsync();
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // If the stream is already available, do not stop in the middle of copying the stream
+                // Pass in CancellationToken.None
+                await _findPackagesByIdResource.CopyPackageAsync(
+                    identity.Name,
+                    identity.Version,
+                    versionFolderPathContext,
                     cacheContext,
                     logger,
                     CancellationToken.None);

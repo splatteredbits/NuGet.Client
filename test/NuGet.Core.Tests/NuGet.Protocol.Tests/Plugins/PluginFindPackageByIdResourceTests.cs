@@ -9,13 +9,13 @@ namespace NuGet.Protocol.Plugins.Tests
 {
     public class PluginFindPackageByIdResourceTests
     {
-        [Fact]
-        public void Constructor_ThrowsForNullPluginResource()
-        {
-            var exception = Assert.Throws<ArgumentNullException>(
-                () => new PluginFindPackageByIdResource(pluginResource: null));
+        //[Fact]
+        //public void Constructor_ThrowsForNullPluginResource()
+        //{
+        //    var exception = Assert.Throws<ArgumentNullException>(
+        //        () => new PluginFindPackageByIdResource(pluginResource: null));
 
-            Assert.Equal("pluginResource", exception.ParamName);
-        }
+        //    Assert.Equal("pluginResource", exception.ParamName);
+        //}
     }
 }

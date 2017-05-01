@@ -4,9 +4,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Common;
+using NuGet.Configuration;
 using NuGet.Protocol.Plugins;
 
 namespace NuGet.Protocol.Core.Types
@@ -16,6 +18,7 @@ namespace NuGet.Protocol.Core.Types
     /// </summary>
     public sealed class PluginResource : INuGetResource
     {
+        private readonly PackageSource _packageSource;
         private readonly IReadOnlyList<PluginCreationResult> _pluginCreationResults;
         private bool _hasLoggedWarnings;
 
@@ -25,7 +28,7 @@ namespace NuGet.Protocol.Core.Types
         /// <param name="pluginCreationResults">Plugin creation results.</param>
         /// <exception cref="ArgumentNullException">Thrown if <paramref name="pluginCreationResults" />
         /// is <c>null</c>.</exception>
-        public PluginResource(IEnumerable<PluginCreationResult> pluginCreationResults)
+        public PluginResource(IEnumerable<PluginCreationResult> pluginCreationResults, PackageSource packageSource = null)
         {
             if (pluginCreationResults == null)
             {
@@ -33,6 +36,7 @@ namespace NuGet.Protocol.Core.Types
             }
 
             _pluginCreationResults = pluginCreationResults.ToArray();
+            _packageSource = packageSource;
         }
 
         /// <summary>
@@ -46,7 +50,7 @@ namespace NuGet.Protocol.Core.Types
         /// <exception cref="ArgumentNullException">Thrown if <paramref name="logger" /> is <c>null</c>.</exception>
         /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken" />
         /// is cancelled.</exception>
-        public Task<IPlugin> GetPluginAsync(
+        public async Task<IPlugin> GetPluginAsync(
             OperationClaim requiredClaim,
             ILogger logger,
             CancellationToken cancellationToken)
@@ -70,11 +74,76 @@ namespace NuGet.Protocol.Core.Types
                 {
                     _hasLoggedWarnings = true;
 
-                    return Task.FromResult<IPlugin>(result.Plugin);
+                    await SetPackageSourceCredentials(result.Plugin, cancellationToken);
+
+                    return result.Plugin;
                 }
             }
 
-            return Task.FromResult<IPlugin>(null);
+            return null;
+        }
+
+        private async Task SetPackageSourceCredentials(IPlugin plugin, CancellationToken cancellationToken)
+        {
+            var payload = CreateRequest();
+
+            await plugin.Connection.SendRequestAndReceiveResponseAsync<SetCredentialsRequest, SetCredentialsResponse>(
+                MessageMethod.SetPackageSourceCredentials,
+                payload,
+                cancellationToken);
+        }
+
+        private SetCredentialsRequest CreateRequest()
+        {
+            var sourceUri = _packageSource.SourceUri;
+            string proxyUsername = null;
+            string proxyPassword = null;
+            string username = null;
+            string password = null;
+            ICredentials credentials;
+
+            if (TryGetCachedCredentials(sourceUri, isProxy: true, credentials: out credentials))
+            {
+                var proxyCredential = credentials.GetCredential(sourceUri, "Basic");
+
+                if (proxyCredential != null)
+                {
+                    proxyUsername = proxyCredential.UserName;
+                    proxyPassword = proxyCredential.Password;
+                }
+            }
+
+            if (TryGetCachedCredentials(sourceUri, isProxy: false, credentials: out credentials))
+            {
+                var packageSourceCredential = credentials.GetCredential(sourceUri, authType: null);
+
+                if (packageSourceCredential != null)
+                {
+                    username = packageSourceCredential.UserName;
+                    password = packageSourceCredential.Password;
+                }
+            }
+
+            return new SetCredentialsRequest(
+                _packageSource.Source,
+                proxyUsername,
+                proxyPassword,
+                username,
+                password);
+        }
+
+        private static bool TryGetCachedCredentials(Uri uri, bool isProxy, out ICredentials credentials)
+        {
+            credentials = null;
+
+            var credentialService = HttpHandlerResourceV3.CredentialService;
+
+            if (credentialService == null)
+            {
+                return false;
+            }
+
+            return credentialService.TryGetLastKnownGoodCredentialsFromCache(uri, isProxy, out credentials);
         }
     }
 }

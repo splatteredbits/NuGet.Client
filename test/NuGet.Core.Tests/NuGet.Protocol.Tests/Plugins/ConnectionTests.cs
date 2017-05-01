@@ -479,17 +479,17 @@ namespace NuGet.Protocol.Plugins.Tests
                 _payload = payload;
             }
 
-            public Task HandleCancelAsync(Message request, CancellationToken cancellationToken)
+            public Task HandleCancelAsync(IConnection connection, Message request, CancellationToken cancellationToken)
             {
                 throw new NotImplementedException();
             }
 
-            public Task HandleProgressAsync(Message request, CancellationToken cancellationToken)
+            public Task HandleProgressAsync(IConnection connection, Message request, CancellationToken cancellationToken)
             {
                 throw new NotImplementedException();
             }
 
-            public Task HandleResponseAsync(Message request, IResponseHandler responseHandler, CancellationToken cancellationToken)
+            public Task HandleResponseAsync(IConnection connection, Message request, IResponseHandler responseHandler, CancellationToken cancellationToken)
             {
                 return responseHandler.SendResponseAsync(request, _payload, cancellationToken);
             }

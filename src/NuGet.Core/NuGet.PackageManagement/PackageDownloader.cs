@@ -265,7 +265,7 @@ namespace NuGet.PackageManagement
                 result.PackageStream.Seek(0, SeekOrigin.Begin);
                 result = new DownloadResourceResult(result.PackageStream, packageReader, sourceRepository.PackageSource.Source);
             }
-            else
+            else if (result.Status != DownloadResourceResultStatus.AvailableWithoutStream)
             {
                 // bind the source
                 result = new DownloadResourceResult(result.PackageStream, result.PackageReader, sourceRepository.PackageSource.Source);

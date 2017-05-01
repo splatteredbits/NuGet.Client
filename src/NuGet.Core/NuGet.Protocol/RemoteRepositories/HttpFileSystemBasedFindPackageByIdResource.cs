@@ -10,6 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Common;
+using NuGet.Packaging;
 using NuGet.Packaging.Core;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
@@ -116,6 +117,17 @@ namespace NuGet.Protocol
             }
 
             return false;
+        }
+
+        public override Task CopyPackageAsync(
+            string name,
+            NuGetVersion version,
+            VersionFolderPathContext versionFolderPathContext,
+            SourceCacheContext cacheContext,
+            ILogger logger,
+            CancellationToken none)
+        {
+            throw new NotSupportedException();
         }
 
         private async Task<SortedDictionary<NuGetVersion, PackageInfo>> EnsurePackagesAsync(
