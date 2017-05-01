@@ -20,14 +20,14 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup Condition="'$(VisualStudioVersion)' == '15.0'">
-    <Compile Include="LegacyCSProjPackageReferenceProjectTests.cs" />
+    <Compile Include="ProjectSystems\LegacyCSProjPackageReferenceProjectTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DispatcherThreadCollection.cs" />
     <Compile Include="Feeds\MultiSourcePackageMetadataProviderTests.cs" />
     <Compile Include="Feeds\UpdatePackageFeedTests.cs" />
     <Compile Include="FrameworkAssemblyResolverTests.cs" />
-    <Compile Include="ProjectKNuGetProjectTests.cs" />
+    <Compile Include="ProjectSystems\ProjectKNuGetProjectTests.cs" />
     <Compile Include="ProjectSystems\ProjectSystemCacheTests.cs" />
     <Compile Include="Services\NuGetLockServiceTests.cs" />
     <Compile Include="Telemetry\ActionsTelemetryServiceTests.cs" />
