@@ -31,6 +31,21 @@ namespace NuGet.Protocol.Plugins
                 throw new ArgumentNullException(nameof(pluginResource));
             }
 
+            if (packageSource == null)
+            {
+                throw new ArgumentNullException(nameof(packageSource));
+            }
+
+            if (httpHandler == null)
+            {
+                throw new ArgumentNullException(nameof(httpHandler));
+            }
+
+            if (credentialService == null)
+            {
+                throw new ArgumentNullException(nameof(credentialService));
+            }
+
             _pluginResource = pluginResource;
             _packageSource = packageSource;
             _httpHandler = httpHandler;

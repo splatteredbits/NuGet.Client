@@ -22,6 +22,8 @@ namespace NuGet.Protocol.Plugins.Tests
         public DownloadResourcePluginProviderTests()
         {
             _provider = new DownloadResourcePluginProvider();
+
+            HttpHandlerResourceV3.CredentialService = Mock.Of<ICredentialService>();
         }
 
         [Fact]
@@ -112,11 +114,26 @@ namespace NuGet.Protocol.Plugins.Tests
             var packageSource = new PackageSource(source: "");
             var providers = new INuGetResourceProvider[]
             {
+                CreateMockHttpHandlerResource(),
                 CreatePluginResourceProvider(createPluginResource),
                 CreateServiceIndexResourceV3Provider(createServiceIndexResourceV3)
             };
 
             return new SourceRepository(packageSource, providers);
+        }
+
+        private static HttpHandlerResourceV3Provider CreateMockHttpHandlerResource()
+        {
+            var provider = new Mock<HttpHandlerResourceV3Provider>();
+
+            provider.Setup(x => x.Name)
+                .Returns(nameof(HttpHandlerResourceV3Provider));
+            provider.Setup(x => x.ResourceType)
+                .Returns(typeof(HttpHandlerResource));
+            provider.Setup(x => x.TryCreate(It.IsAny<SourceRepository>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.FromResult(new Tuple<bool, INuGetResource>(true, Mock.Of<HttpHandlerResource>())));
+
+            return provider.Object;
         }
 
         private static PluginResourceProvider CreatePluginResourceProvider(bool createResource)

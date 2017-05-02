@@ -30,11 +30,25 @@ namespace NuGet.Protocol.Core.Types
         /// <param name="pluginResource">A plugin resource.</param>
         /// <exception cref="ArgumentNullException">Thrown if <paramref name="pluginResource" />
         /// is <c>null</c>.</exception>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="packageSource" />
+        /// is <c>null</c>.</exception>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="credentialProvider" />
+        /// is <c>null</c>.</exception>
         public PluginFindPackageByIdResource(PluginResource pluginResource, PackageSource packageSource, PluginCredentialProvider credentialProvider)
         {
             if (pluginResource == null)
             {
                 throw new ArgumentNullException(nameof(pluginResource));
+            }
+
+            if (packageSource == null)
+            {
+                throw new ArgumentNullException(nameof(packageSource));
+            }
+
+            if (credentialProvider == null)
+            {
+                throw new ArgumentNullException(nameof(credentialProvider));
             }
 
             _pluginResource = pluginResource;

@@ -53,6 +53,7 @@ namespace NuGet.Protocol
             {
                 var serviceIndexResource = await source.GetResourceAsync<ServiceIndexResourceV3>(cancellationToken);
                 var httpHandler = await source.GetResourceAsync<HttpHandlerResource>(cancellationToken);
+
                 if (serviceIndexResource != null)
                 {
                     var credentialProvider = new PluginCredentialProvider(
@@ -60,6 +61,7 @@ namespace NuGet.Protocol
                         source.PackageSource,
                         httpHandler,
                         HttpHandlerResourceV3.CredentialService);
+
                     resource = new DownloadResourcePlugin(pluginResource, source.PackageSource, credentialProvider);
                 }
             }
