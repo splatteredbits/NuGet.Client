@@ -16,7 +16,6 @@ using NuGet.Test.Utility;
 using NuGet.Versioning;
 using NuGet.VisualStudio;
 using Test.Utility.Threading;
-using VSLangProj;
 using VSLangProj150;
 using Xunit;
 using Task = System.Threading.Tasks.Task;

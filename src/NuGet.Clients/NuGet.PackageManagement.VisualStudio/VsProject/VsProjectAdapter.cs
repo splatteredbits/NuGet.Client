@@ -9,8 +9,6 @@ using System.Linq;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
 using Microsoft;
-using Microsoft.VisualStudio.ProjectSystem;
-using Microsoft.VisualStudio.ProjectSystem.Properties;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.Threading;
@@ -22,7 +20,6 @@ using NuGet.ProjectModel;
 using NuGet.RuntimeModel;
 using NuGet.VisualStudio;
 using VSLangProj;
-using VSLangProj150;
 
 namespace NuGet.PackageManagement.VisualStudio
 {
@@ -37,9 +34,6 @@ namespace NuGet.PackageManagement.VisualStudio
         private readonly IVsProjectAdapterProvider _vsProjectAdapterProvider;
         private readonly IDeferredProjectWorkspaceService _deferredProjectWorkspaceService;
         private readonly AsyncLazy<IMSBuildProjectDataService> _buildProjectDataService;
-        private readonly Lazy<VSProject4> _asVSProject4;
-
-        private VSProject4 AsVSProject4 => _asVSProject4.Value;
 
         #endregion Private members
 
@@ -162,11 +156,6 @@ namespace NuGet.PackageManagement.VisualStudio
             {
                 ThreadHelper.ThrowIfNotOnUIThread();
 
-                if (AsVSProject4 != null)
-                {
-                    return AsVSProject4.References;
-                }
-
                 dynamic projectObj = Project.Object;
                 var references = (References)projectObj.References;
                 projectObj = null;
@@ -228,7 +217,6 @@ namespace NuGet.PackageManagement.VisualStudio
         public VsProjectAdapter(
             EnvDTE.Project dteProject,
             IVsProjectAdapterProvider vsProjectAdapterProvider)
-            : this()
         {
             Assumes.Present(dteProject);
             Assumes.Present(vsProjectAdapterProvider);
@@ -247,7 +235,6 @@ namespace NuGet.PackageManagement.VisualStudio
             Func<IVsHierarchy, EnvDTE.Project> loadDteProject,
             IVsProjectAdapterProvider vsProjectAdapterProvider,
             IDeferredProjectWorkspaceService deferredProjectWorkspaceService)
-            : this()
         {
             Assumes.Present(project);
             Assumes.Present(projectNames);
@@ -266,11 +253,6 @@ namespace NuGet.PackageManagement.VisualStudio
             _buildProjectDataService = new AsyncLazy<IMSBuildProjectDataService>(
                 () => _deferredProjectWorkspaceService.GetMSBuildProjectDataServiceAsync(FullProjectPath),
                 NuGetUIThreadHelper.JoinableTaskFactory);
-        }
-
-        private VsProjectAdapter()
-        {
-            _asVSProject4 = new Lazy<VSProject4>(() => Project.Object as VSProject4);
         }
 
         #endregion Constructors
@@ -469,17 +451,6 @@ namespace NuGet.PackageManagement.VisualStudio
 
                 return nuGetFramework;
             }
-        }
-
-        public UnconfiguredProject GetUnconfiguredProject()
-        {
-            var context = Project as IVsBrowseObjectContext;
-            if (context == null)
-            { 
-                // VC implements this on their DTE.Project.Object
-                context = Project.Object as IVsBrowseObjectContext;
-            }
-            return context?.UnconfiguredProject;
         }
 
         #endregion Getters
